@@ -120,18 +120,18 @@ raw.step1 <- add.price.per.unit(raw.step1)
 #---------------------------------------------------------------------------------------------------------
 
 # get list of columns to be checked for outliers
-cols.outliers <- c(as.character(lapply(all.items, function(x) paste0(x, "_price_per_unit"))),
+cols.outliers1 <- c(as.character(lapply(all.items, function(x) paste0(x, "_price_per_unit"))),
                    "water_price_per_unit", 
                    "water_price_per_unit_5km", "water_price_per_unit_10km")
 # detect outliers
 outliers.sub1 <- raw.step1 %>% 
-  select("uuid", all_of(cols.outliers)) %>% 
+  select("uuid", all_of(cols.outliers1)) %>% 
   detect.outliers(., method="sd-linear", n.sd=3)
 outliers.sub2 <- raw.step1 %>% 
-  select("uuid", all_of(cols.outliers)) %>% 
+  select("uuid", all_of(cols.outliers1)) %>% 
   detect.outliers(., method="sd-log", n.sd=3)
 outliers.sub3 <- raw.step1 %>% 
-  select("uuid", all_of(cols.outliers)) %>% 
+  select("uuid", all_of(cols.outliers1)) %>% 
   detect.outliers(., method="iqr")
 outliers <- rbind(outliers.sub1, outliers.sub2, outliers.sub3)
 outliers <- outliers %>% mutate(mid=paste0(uuid, variable))
@@ -142,14 +142,33 @@ outliers <- outliers[!duplicated(outliers$mid),] %>% select(-mid)
 cleaning.log.outliers <- create.outliers.cleaning.log(outliers)
 
 # create boxplot to visually inspect outlier detection performance
-generate.outliers.boxplot()
+generate.price.outliers.boxplot()
 
 
 #---------------------------------------------------------------------------------------------------------
 # Step 1.6: Outliers detection (other numeric variables)
 #---------------------------------------------------------------------------------------------------------
 
+cols.outliers2 <- c(as.character(lapply(all.items, function(x) paste0(x, "_stock_days"))),
+                    as.character(lapply(all.items, function(x) paste0(x, "_resupply_days"))))
 
+outliers.sub1 <- raw.step1 %>% 
+  select("uuid", all_of(cols.outliers2)) %>% 
+  detect.outliers(., method="sd-linear", n.sd=3)
+outliers.sub2 <- raw.step1 %>% 
+  select("uuid", all_of(cols.outliers2)) %>% 
+  detect.outliers(., method="sd-log", n.sd=3)
+outliers.sub3 <- raw.step1 %>% 
+  select("uuid", all_of(cols.outliers2)) %>% 
+  detect.outliers(., method="iqr")
+outliers <- rbind(outliers.sub1, outliers.sub2, outliers.sub3)
+outliers <- outliers %>% mutate(mid=paste0(uuid, variable))
+cleaning.log.outliers.generic <- outliers[!duplicated(outliers$mid),] %>% select(-mid) %>% 
+  mutate(item=NA, check.id="Outlier",
+         issue="Value seems to be too low or to high. Please check/confirm.")
+
+# create boxplot to visually inspect outlier detection performance
+generate.generic.outliers.boxplot()
 
 #---------------------------------------------------------------------------------------------------------
 # Step 1.7: Logical checks
@@ -172,7 +191,7 @@ cleaning.log.logical <- do.call(rbind, res[as.logical(lapply(res, function(x) nr
 # Step 1.8: Produce file with follow-up requests to be sent to partners
 #---------------------------------------------------------------------------------------------------------
 
-cleaning.log <- rbind(cleaning.log.outliers, cleaning.log.logical)
+cleaning.log <- rbind(cleaning.log.outliers, cleaning.log.outliers2, cleaning.log.logical)
 cleaning.log$new.value <- NA
 cleaning.log$explanation <- NA
 cleaning.log <- left_join(cleaning.log, 

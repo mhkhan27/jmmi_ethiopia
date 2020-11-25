@@ -94,13 +94,13 @@ create.outliers.cleaning.log <- function(outliers){
                                               old.value=get.value(raw.step1, uuid, price.variable)))
   }
   cleaning.log.outliers$issue <- "Price seems to be too low or to high. Please check/confirm the quantity, unit, and price."
-  cleaning.log.outliers$check.id <- "Outlier"
+  cleaning.log.outliers$check.id <- "Outlier.price"
   return(cleaning.log.outliers)
 }
 
-generate.outliers.boxplot <- function(){
-  df <- raw.step1[, c("uuid", "adm1_region", "adm2_zone", "adm3_woreda", all_of(cols.outliers))] %>% 
-    pivot_longer(cols=all_of(cols.outliers), names_to="variable", values_to="value") %>% 
+generate.price.outliers.boxplot <- function(){
+  df <- raw.step1[, c("uuid", "adm1_region", "adm2_zone", "adm3_woreda", all_of(cols.outliers1))] %>% 
+    pivot_longer(cols=all_of(cols.outliers1), names_to="variable", values_to="value") %>% 
     filter(!is.na(value))
   df$item <- as.character(lapply(df$variable, function(x) str_split(x, "_price")[[1]][1]))
   cl <- cleaning.log.outliers %>% 
@@ -115,7 +115,25 @@ generate.outliers.boxplot <- function(){
     geom_point(aes(x=adm0, y=(as.numeric(value))), 
                alpha=f.alpha(df$detected), colour=f.colour(df$detected)) +
     facet_wrap(~variable, scales="free_y", nrow = 6, ncol = 3)
-  ggsave(paste0("output/test_outlier_analysis.pdf"), g, 
+  ggsave(paste0("output/outlier_analysis_prices.pdf"), g, 
+         width = 40, height = 40, units = "cm", device="pdf")
+}
+
+generate.generic.outliers.boxplot <- function(){
+  df <- raw.step1[, c("uuid", "adm1_region", "adm2_zone", "adm3_woreda", all_of(cols.outliers2))] %>% 
+    pivot_longer(cols=all_of(cols.outliers2), names_to="variable", values_to="value") %>% 
+    filter(!is.na(value))
+  cl <- cleaning.log.outliers.generic %>% select(uuid, variable) %>% mutate(detected=T)
+  df <- left_join(df, cl, by=c("uuid", "variable")) %>% 
+    mutate(detected=ifelse(is.na(detected), F, detected), adm0="national")
+  f.alpha <- function(x) return(ifelse(x, 1, 0))
+  f.colour <- function(x) return(ifelse(x, "#FF0000", "#00FF00"))
+  g <- ggplot(df) +
+    geom_boxplot(aes(x=adm0, y=(as.numeric(value)))) + ylab("Values") +
+    geom_point(aes(x=adm0, y=(as.numeric(value))), 
+               alpha=f.alpha(df$detected), colour=f.colour(df$detected)) +
+    facet_wrap(~variable, scales="free_y", nrow = 6, ncol = 4)
+  ggsave(paste0("output/outlier_analysis_generic.pdf"), g, 
          width = 40, height = 40, units = "cm", device="pdf")
 }
 
@@ -202,7 +220,7 @@ save.follow.up.requests <- function(cl){
   col.id <- which(colnames(cl)=="old.value")
   random.color <- ""
   for (r in 2:dim(cl)[1]){
-    if(as.character(cl[r, "check.id"])=="Outlier" &
+    if(as.character(cl[r, "check.id"])=="Outlier.price" &
        as.character(cl[r, "uuid"])==as.character(cl[r-1, "uuid"]) &
        !is.na(as.character(cl[r, "item"])) & !is.na(as.character(cl[r - 1, "item"])) &
        as.character(cl[r, "item"])==as.character(cl[r-1, "item"])){
