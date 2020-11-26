@@ -1,10 +1,5 @@
-library(tidyverse)
-library(readxl)
-library(writexl)
-library(openxlsx)
-library(httr)
-library(randomcoloR)
-library(anytime)
+if (!require("pacman")) install.packages("pacman")
+pacman::p_load(tidyverse, readxl, writexl, openxlsx, httr, randomcoloR, anytime, sf, leaflet, mapview)
 
 # set wd to this script's locations
 setwd(dirname(rstudioapi::getActiveDocumentContext()$path))
@@ -64,9 +59,39 @@ raw.check <- raw %>%
 raw.check.flagged <- filter(raw.check, minutes < 30)
 if (nrow(raw.check.flagged) > 0) stop("Surveys with duration < 30 minutes were detected")
 
-# check GPS
-# TODO
-
+# CHECK GPS
+# 1) load shapes layers
+woredas <-  st_transform(st_read("resources/ETH_COD_SHP/eth_admbnda_adm3_csa_bofed_20201008.shp"), crs = 4326)
+zones <-  st_transform(st_read("resources/ETH_COD_SHP/eth_admbnda_adm2_csa_bofed_20201008.shp"), crs = 4326)
+regions <-  st_transform(st_read("resources/ETH_COD_SHP/eth_admbnda_adm1_csa_bofed_20201008.shp"), crs = 4326)
+# 2) convert dataset to sf data.frame and do spatial join with woreda layer
+survey.points <- filter(raw, !is.na(`_gps_longitude`)) %>% 
+  st_as_sf(x = ., coords = c("_gps_longitude", "_gps_latitude"), crs=4326) %>% 
+  st_join(woredas["ADM3_PCODE"]) %>% st_join(zones["ADM2_PCODE"]) %>% st_join(regions["ADM1_PCODE"])
+# 3) generate and save map
+m <- leaflet() %>% 
+  addPolygons(data = regions, color = "#0000FF", opacity = 0.3, fillOpacity = 0.1, weight = 2,
+              label = regions$ADM3_PCODE) %>% 
+  addPolygons(data = woredas, color = "#0000FF", opacity = 0.2, fillOpacity = 0, weight = 1,
+              label = woredas$ADM3_PCODE) %>% 
+  addCircleMarkers(data = survey.points, radius=5, color = "#FF00FF", stroke=F, fillOpacity = 0.5, 
+                   label = paste0(survey.points$partner, "_", survey.points$adm3_woreda)) %>% 
+  addTiles()
+mapshot(m, file=paste0("output/", assessment.month, "_map_samples.pdf"))
+# 4) check that reported woreda is within the woreda polygon
+raw.check <- st_drop_geometry(survey.points) %>% 
+  mutate(woreda.reported=adm3_woreda, woreda.gps=ADM3_PCODE, check=(woreda.reported!=woreda.gps)) %>% 
+  filter(check) %>% select(uuid, woreda.reported, woreda.gps)
+# 5) generate cleaning log with required changes to fix wrongly reported admins
+cl.adm3 <- raw.check %>% mutate(variable="adm3_woreda") %>% 
+  rename(old.value=woreda.reported, new.value=woreda.gps)
+cl.adm2 <- cl.adm3 %>% 
+  mutate(variable="adm2_zone", old.value=str_sub(old.value, 1, 6), new.value=str_sub(new.value, 1, 6))
+cl.adm1 <- cl.adm3 %>% 
+  mutate(variable="adm1_region", old.value=str_sub(old.value, 1, 4), new.value=str_sub(new.value, 1, 4))
+cl.gps <- rbind(cl.adm1, cl.adm2, cl.adm3)
+# 6) apply changes
+raw.step1 <- apply.changes(raw, cl.gps)
 
 #---------------------------------------------------------------------------------------------------------
 # Step 1.3: fix nonstandard_unit wrongly reported as "other" <-- MANUALLY!!
@@ -87,7 +112,7 @@ cl.other <- rbind(cl.other,
                   data.frame(uuid="c85a6190-052c-437b-aa06-7e46488804c0",
                              variable="bath_soap_nonstandard_unit_other", old.value="Pieces", new.value=NA))
 # apply changes
-raw.step1 <- apply.changes(raw, cl.other)
+raw.step1 <- apply.changes(raw.step1, cl.other)
 
 #---------------------------------------------------------------------------------------------------------
 # Step 1.4: add columns with conversion from price to price_per_unit
@@ -144,7 +169,6 @@ cleaning.log.outliers <- create.outliers.cleaning.log(outliers)
 # create boxplot to visually inspect outlier detection performance
 generate.price.outliers.boxplot()
 
-
 #---------------------------------------------------------------------------------------------------------
 # Step 1.6: Outliers detection (other numeric variables)
 #---------------------------------------------------------------------------------------------------------
@@ -185,7 +209,6 @@ cleaning.log.logical <- do.call(rbind, res[as.logical(lapply(res, function(x) nr
   mutate(check.id="Logical",
          issue="This item was reported to be completely unavailable in the marketplace, but it was 
          reported to be sold this week. Please correct the availability (fully_available or limited).")
-
 
 #---------------------------------------------------------------------------------------------------------
 # Step 1.8: Produce file with follow-up requests to be sent to partners
