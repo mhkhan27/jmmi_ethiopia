@@ -19,7 +19,7 @@ assessment.month <- "2020-11"
 filename.tool <- "resources/ETH_JMMI_Kobo_v2.xlsx"
 filename.email.list <- "resources/2020-07-15_email_list.xlsx"
 filename.sendinblue.api.key <- "./api_key.txt"
-filename.raw.dataset <- "data/20201125_data_submission.xlsx"
+filename.raw.dataset <- "data/20201126_data_submission.xlsx"
 
 ##########################################################################################################
 # PLEASE DO NOT CHANGE THE FOLLOWING PARAMETERS
@@ -54,10 +54,11 @@ if (dim(duplicates)[1] > 0) stop("Duplicates detected in the RAW file.")
 
 # check for survey duration
 raw.check <- raw %>% 
-  mutate(minutes=as.numeric(anytime(raw$end)-anytime(raw$start))) %>% 
-  select(uuid, method, start, end, minutes)
-raw.check.flagged <- filter(raw.check, minutes < 30)
-if (nrow(raw.check.flagged) > 0) stop("Surveys with duration < 30 minutes were detected")
+  mutate(minutes=as.numeric(anytime(raw$end)-anytime(raw$start), units="mins")) %>% 
+  select(uuid, partner, method, date_of_dc, consent_yn, type_vendor, start, end, minutes)
+raw.checks.flagged <- raw.check %>% 
+  filter(consent_yn=="yes", minutes < 10)
+if (nrow(raw.checks.flagged) > 0) stop("Surveys with duration < 10 minutes were detected")
 
 ##########################################################################################################
 # Step 1.3: GPS check
@@ -107,8 +108,8 @@ raw.step1 <- apply.changes(raw, cl.gps)
 
 # generate dataframe with all other responses for the nonstandart_unit
 cl.other <- data.frame()
-cols <- colnames(raw)[grepl("_nonstandard_unit_other", colnames(raw))]
-other <- raw[c("uuid", cols)] %>% 
+cols <- colnames(raw.step1)[grepl("_nonstandard_unit_other", colnames(raw.step1))]
+other <- raw.step1[c("uuid", cols)] %>% 
   pivot_longer(cols=all_of(cols), names_to="variable", values_to="old.value") %>% 
   filter(!is.na(old.value))
 # --> open other data.frame and manually recode existing units
@@ -165,7 +166,7 @@ outliers.sub2 <- raw.step1 %>%
   detect.outliers(., method="sd-log", n.sd=3)
 outliers.sub3 <- raw.step1 %>% 
   select("uuid", all_of(cols.outliers1)) %>% 
-  detect.outliers(., method="iqr")
+  detect.outliers(., method="iqr-log")
 outliers <- rbind(outliers.sub1, outliers.sub2, outliers.sub3)
 outliers <- outliers %>% mutate(mid=paste0(uuid, variable))
 outliers <- outliers[!duplicated(outliers$mid),] %>% select(-mid)
@@ -181,19 +182,16 @@ generate.price.outliers.boxplot()
 # Step 1.7: Outliers detection (other numeric variables)
 ##########################################################################################################
 
-cols.outliers2 <- c(as.character(lapply(all.items, function(x) paste0(x, "_stock_days"))),
+cols.outliers.gen <- c(as.character(lapply(all.items, function(x) paste0(x, "_stock_days"))),
                     as.character(lapply(all.items, function(x) paste0(x, "_resupply_days"))))
 
 outliers.sub1 <- raw.step1 %>% 
-  select("uuid", all_of(cols.outliers2)) %>% 
+  select("uuid", all_of(cols.outliers.gen)) %>% 
   detect.outliers(., method="sd-linear", n.sd=3)
 outliers.sub2 <- raw.step1 %>% 
-  select("uuid", all_of(cols.outliers2)) %>% 
-  detect.outliers(., method="sd-log", n.sd=3)
-outliers.sub3 <- raw.step1 %>% 
-  select("uuid", all_of(cols.outliers2)) %>% 
-  detect.outliers(., method="iqr")
-outliers <- rbind(outliers.sub1, outliers.sub2, outliers.sub3)
+  select("uuid", all_of(cols.outliers.gen)) %>% 
+  detect.outliers(., method="iqr-linear")
+outliers <- rbind(outliers.sub1, outliers.sub2)
 outliers <- outliers %>% mutate(mid=paste0(uuid, variable))
 cleaning.log.outliers.generic <- outliers[!duplicated(outliers$mid),] %>% select(-mid) %>% 
   mutate(item=NA, check.id="Outlier",
@@ -222,7 +220,7 @@ cleaning.log.logical <- do.call(rbind, res[as.logical(lapply(res, function(x) nr
 # Step 1.9: Produce file with follow-up requests to be sent to partners
 ##########################################################################################################
 
-cleaning.log <- rbind(cleaning.log.outliers, cleaning.log.outliers2, cleaning.log.logical)
+cleaning.log <- rbind(cleaning.log.outliers, cleaning.log.outliers.generic, cleaning.log.logical)
 cleaning.log$new.value <- NA
 cleaning.log$explanation <- NA
 cleaning.log <- left_join(cleaning.log, 
@@ -240,6 +238,7 @@ save.follow.up.requests(cleaning.log)
 ##########################################################################################################
 # Step 2: split follow up responses and send emails to partners
 ##########################################################################################################
+
 
 
 ##########################################################################################################

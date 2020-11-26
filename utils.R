@@ -32,6 +32,8 @@ calculate_price_per_unit <- function(item, standard_unit, non_standard_unit, uni
     non_standard_unit == "gram" ~ price / unit_g * 1000,
     non_standard_unit == "millilitre" ~ price / unit_ml * 1000,
     non_standard_unit == "medeb" & item == "vegetables_leafy_darkgreen" ~ price / 0.5,
+    non_standard_unit == "piece" & item == "bath_soap" ~ price,
+    non_standard_unit == "piece" & item == "vegetables_leafy_darkgreen" ~ price / 0.5,
     TRUE ~ NA_real_)
 }
 
@@ -115,13 +117,13 @@ generate.price.outliers.boxplot <- function(){
     geom_point(aes(x=adm0, y=(as.numeric(value))), 
                alpha=f.alpha(df$detected), colour=f.colour(df$detected)) +
     facet_wrap(~variable, scales="free_y", nrow = 6, ncol = 3)
-  ggsave(paste0("output/outlier_analysis_prices.pdf"), g, 
+  ggsave(paste0("output/", assessment.month, "_outlier_analysis_prices.pdf"), g, 
          width = 40, height = 40, units = "cm", device="pdf")
 }
 
 generate.generic.outliers.boxplot <- function(){
-  df <- raw.step1[, c("uuid", "adm1_region", "adm2_zone", "adm3_woreda", all_of(cols.outliers2))] %>% 
-    pivot_longer(cols=all_of(cols.outliers2), names_to="variable", values_to="value") %>% 
+  df <- raw.step1[, c("uuid", "adm1_region", "adm2_zone", "adm3_woreda", all_of(cols.outliers.gen))] %>% 
+    pivot_longer(cols=all_of(cols.outliers.gen), names_to="variable", values_to="value") %>% 
     filter(!is.na(value))
   cl <- cleaning.log.outliers.generic %>% select(uuid, variable) %>% mutate(detected=T)
   df <- left_join(df, cl, by=c("uuid", "variable")) %>% 
@@ -133,7 +135,7 @@ generate.generic.outliers.boxplot <- function(){
     geom_point(aes(x=adm0, y=(as.numeric(value))), 
                alpha=f.alpha(df$detected), colour=f.colour(df$detected)) +
     facet_wrap(~variable, scales="free_y", nrow = 6, ncol = 4)
-  ggsave(paste0("output/outlier_analysis_generic.pdf"), g, 
+  ggsave(paste0("output/", assessment.month, "_outlier_analysis_generic.pdf"), g, 
          width = 40, height = 40, units = "cm", device="pdf")
 }
 
@@ -167,7 +169,11 @@ detect.outliers <- function(df, method="sd", n.sd=3){
         mutate(col.log=log(value),
                is.outlier=ifelse(col.log > mean(col.log, na.rm=T) + n.sd*sd(col.log, na.rm=T) | 
                                    col.log < mean(col.log, na.rm=T) - n.sd*sd(col.log, na.rm=T), T, F))
-    } else if (method=="iqr") {
+    } else if (method=="iqr-linear") {
+      df.temp <- df.temp %>%
+        mutate(is.outlier=ifelse(value > quantile(value, 0.75) + 1.5*IQR(value) |
+                                   value < quantile(value, 0.25) - 1.5*IQR(value), T, F))
+    } else if (method=="iqr-log") {
       df.temp <- df.temp %>%
         mutate(col.log=log(value),
                is.outlier=ifelse(col.log > quantile(col.log, 0.75) + 1.5*IQR(col.log) |
@@ -212,7 +218,7 @@ save.follow.up.requests <- function(cl){
   col.id <- which(colnames(cl)=="issue")
   addStyle(wb, "Follow-up", style = createStyle(wrapText=T), rows=1:(dim(cl)[1]+1), cols=col.id)
   setColWidths(wb, "Follow-up", cols=col.id, widths=35)
-  setColWidths(wb, "Follow-up", cols=c(2, 4, 5, 6, 7, 12, 13), widths=13)
+  setColWidths(wb, "Follow-up", cols=c(2, 4, 5, 6, 7, 8, 12, 13), widths=13)
   setColWidths(wb, "Follow-up", cols=c(10, 11, 14), widths=22)
   col.style <- createStyle(textDecoration="bold", fgFill="#CECECE", halign="center",
                            border="TopBottomLeftRight", borderColour="#000000")
