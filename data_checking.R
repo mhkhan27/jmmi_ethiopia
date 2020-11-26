@@ -10,9 +10,9 @@ setwd(dirname(rstudioapi::getActiveDocumentContext()$path))
 source("./utils.R")
 
 
-#---------------------------------------------------------------------------------------------------------
+##########################################################################################################
 # PLEASE CHECK THE FOLLOWING PARAMETERS AT EACH ROUND AND UPDATE IF NEEDED
-#---------------------------------------------------------------------------------------------------------
+##########################################################################################################
 # specify month of the assessment (it is used in the name of the output files)
 assessment.month <- "2020-11"
 # specify URLs and input filenames
@@ -21,9 +21,9 @@ filename.email.list <- "resources/2020-07-15_email_list.xlsx"
 filename.sendinblue.api.key <- "./api_key.txt"
 filename.raw.dataset <- "data/20201125_data_submission.xlsx"
 
-#---------------------------------------------------------------------------------------------------------
+##########################################################################################################
 # PLEASE DO NOT CHANGE THE FOLLOWING PARAMETERS
-#---------------------------------------------------------------------------------------------------------
+##########################################################################################################
 # directories
 directory.requests <- "output/partner_requests/"
 directory.responses <- "output/partner_responses/"
@@ -32,9 +32,9 @@ directory.outputs <- "output/"
 filename.out.fu.requests <- paste(directory.requests, assessment.month, "_follow_up_requests.xlsx", sep="")
 
 
-#---------------------------------------------------------------------------------------------------------
+##########################################################################################################
 # Step 1.1: Load tool and dataset
-#---------------------------------------------------------------------------------------------------------
+##########################################################################################################
 
 # load tool
 tool.survey <- read_excel(filename.tool, sheet="survey")
@@ -44,9 +44,9 @@ tool.choices <- read_excel(filename.tool, sheet="choices") %>% filter(!is.na(lis
 raw <- read_excel(filename.raw.dataset, sheet=1, col_types = "text") %>% rename(uuid="_uuid")
 
 
-#---------------------------------------------------------------------------------------------------------
-# Step 1.2: General checks --> triggers an error
-#---------------------------------------------------------------------------------------------------------
+##########################################################################################################
+# Step 1.2: check for duplicates and short survey duration --> triggers an error
+##########################################################################################################
 
 # check for duplicates
 duplicates <- raw %>% group_by(uuid) %>% summarise(n=n()) %>% filter(n>1)
@@ -59,15 +59,20 @@ raw.check <- raw %>%
 raw.check.flagged <- filter(raw.check, minutes < 30)
 if (nrow(raw.check.flagged) > 0) stop("Surveys with duration < 30 minutes were detected")
 
-# CHECK GPS
+##########################################################################################################
+# Step 1.3: GPS check
+##########################################################################################################
+
 # 1) load shapes layers
 woredas <-  st_transform(st_read("resources/ETH_COD_SHP/eth_admbnda_adm3_csa_bofed_20201008.shp"), crs = 4326)
 zones <-  st_transform(st_read("resources/ETH_COD_SHP/eth_admbnda_adm2_csa_bofed_20201008.shp"), crs = 4326)
 regions <-  st_transform(st_read("resources/ETH_COD_SHP/eth_admbnda_adm1_csa_bofed_20201008.shp"), crs = 4326)
+
 # 2) convert dataset to sf data.frame and do spatial join with woreda layer
 survey.points <- filter(raw, !is.na(`_gps_longitude`)) %>% 
   st_as_sf(x = ., coords = c("_gps_longitude", "_gps_latitude"), crs=4326) %>% 
   st_join(woredas["ADM3_PCODE"]) %>% st_join(zones["ADM2_PCODE"]) %>% st_join(regions["ADM1_PCODE"])
+
 # 3) generate and save map
 m <- leaflet() %>% 
   addPolygons(data = regions, color = "#0000FF", opacity = 0.3, fillOpacity = 0.1, weight = 2,
@@ -78,10 +83,12 @@ m <- leaflet() %>%
                    label = paste0(survey.points$partner, "_", survey.points$adm3_woreda)) %>% 
   addTiles()
 mapshot(m, file=paste0("output/", assessment.month, "_map_samples.pdf"))
+
 # 4) check that reported woreda is within the woreda polygon
 raw.check <- st_drop_geometry(survey.points) %>% 
   mutate(woreda.reported=adm3_woreda, woreda.gps=ADM3_PCODE, check=(woreda.reported!=woreda.gps)) %>% 
   filter(check) %>% select(uuid, woreda.reported, woreda.gps)
+
 # 5) generate cleaning log with required changes to fix wrongly reported admins
 cl.adm3 <- raw.check %>% mutate(variable="adm3_woreda") %>% 
   rename(old.value=woreda.reported, new.value=woreda.gps)
@@ -90,12 +97,13 @@ cl.adm2 <- cl.adm3 %>%
 cl.adm1 <- cl.adm3 %>% 
   mutate(variable="adm1_region", old.value=str_sub(old.value, 1, 4), new.value=str_sub(new.value, 1, 4))
 cl.gps <- rbind(cl.adm1, cl.adm2, cl.adm3)
+
 # 6) apply changes
 raw.step1 <- apply.changes(raw, cl.gps)
 
-#---------------------------------------------------------------------------------------------------------
-# Step 1.3: fix nonstandard_unit wrongly reported as "other" <-- MANUALLY!!
-#---------------------------------------------------------------------------------------------------------
+##########################################################################################################
+# Step 1.4: fix nonstandard_unit wrongly reported as "other" <-- MANUALLY!!
+##########################################################################################################
 
 # generate dataframe with all other responses for the nonstandart_unit
 cl.other <- data.frame()
@@ -114,9 +122,9 @@ cl.other <- rbind(cl.other,
 # apply changes
 raw.step1 <- apply.changes(raw.step1, cl.other)
 
-#---------------------------------------------------------------------------------------------------------
-# Step 1.4: add columns with conversion from price to price_per_unit
-#---------------------------------------------------------------------------------------------------------
+##########################################################################################################
+# Step 1.5: add columns with conversion from price to price_per_unit
+##########################################################################################################
 
 # get list of all food and hygiene items (excluding water) and their standard units
 all.items <- (tool.choices %>% filter(list_name=="all_items", name!="water"))$name
@@ -140,9 +148,9 @@ raw.step1 <- to.double(raw.step1, columns=cols)
 # calculate price per unit (i.e. conversion for prices not collected in standard units)
 raw.step1 <- add.price.per.unit(raw.step1)
 
-#---------------------------------------------------------------------------------------------------------
-# Step 1.5: Outliers detection (prices)
-#---------------------------------------------------------------------------------------------------------
+##########################################################################################################
+# Step 1.6: Outliers detection (prices)
+##########################################################################################################
 
 # get list of columns to be checked for outliers
 cols.outliers1 <- c(as.character(lapply(all.items, function(x) paste0(x, "_price_per_unit"))),
@@ -169,9 +177,9 @@ cleaning.log.outliers <- create.outliers.cleaning.log(outliers)
 # create boxplot to visually inspect outlier detection performance
 generate.price.outliers.boxplot()
 
-#---------------------------------------------------------------------------------------------------------
-# Step 1.6: Outliers detection (other numeric variables)
-#---------------------------------------------------------------------------------------------------------
+##########################################################################################################
+# Step 1.7: Outliers detection (other numeric variables)
+##########################################################################################################
 
 cols.outliers2 <- c(as.character(lapply(all.items, function(x) paste0(x, "_stock_days"))),
                     as.character(lapply(all.items, function(x) paste0(x, "_resupply_days"))))
@@ -194,9 +202,9 @@ cleaning.log.outliers.generic <- outliers[!duplicated(outliers$mid),] %>% select
 # create boxplot to visually inspect outlier detection performance
 generate.generic.outliers.boxplot()
 
-#---------------------------------------------------------------------------------------------------------
-# Step 1.7: Logical checks
-#---------------------------------------------------------------------------------------------------------
+##########################################################################################################
+# Step 1.8: Logical checks
+##########################################################################################################
 
 # In the early section about item availability, vendors are first asked about the general 
 # availability of every monitored item in the market (A), and are then asked which of 
@@ -210,9 +218,9 @@ cleaning.log.logical <- do.call(rbind, res[as.logical(lapply(res, function(x) nr
          issue="This item was reported to be completely unavailable in the marketplace, but it was 
          reported to be sold this week. Please correct the availability (fully_available or limited).")
 
-#---------------------------------------------------------------------------------------------------------
-# Step 1.8: Produce file with follow-up requests to be sent to partners
-#---------------------------------------------------------------------------------------------------------
+##########################################################################################################
+# Step 1.9: Produce file with follow-up requests to be sent to partners
+##########################################################################################################
 
 cleaning.log <- rbind(cleaning.log.outliers, cleaning.log.outliers2, cleaning.log.logical)
 cleaning.log$new.value <- NA
@@ -229,14 +237,14 @@ cleaning.log <- select(cleaning.log, all_of(cleaning.log.cols))
 save.follow.up.requests(cleaning.log)
 
 
-#---------------------------------------------------------------------------------------------------------
+##########################################################################################################
 # Step 2: split follow up responses and send emails to partners
-#---------------------------------------------------------------------------------------------------------
+##########################################################################################################
 
 
-#---------------------------------------------------------------------------------------------------------
+##########################################################################################################
 # Step 3.1: combine follow up responses from all partners
-#---------------------------------------------------------------------------------------------------------
+##########################################################################################################
 
 directory.responses
 
@@ -248,9 +256,9 @@ responses <- lapply(response.filenames, function(f){load.response.file(f, col.na
 write.xlsx(select(responses, -ruuid), filename.out.combined.response)
 
 
-#---------------------------------------------------------------------------------------------------------
+##########################################################################################################
 # Step 3.2: generate cleaning log
-#---------------------------------------------------------------------------------------------------------
+##########################################################################################################
 
 responses <- read_excel("output/partner_responses/2020-11_follow_up_responses.xlsx", col_types = "text")
 
@@ -272,9 +280,9 @@ cleaning.log <- cleaning.log %>% mutate(modified=case_when(
   filter(modified) %>% select(uuid, variable, old.value, new.value)
 
 
-#---------------------------------------------------------------------------------------------------------
+##########################################################################################################
 # Step 3.3: apply changes and re-calculate price_per_unit
-#---------------------------------------------------------------------------------------------------------
+##########################################################################################################
 
 raw.step3 <- apply.changes(raw.step1, cleaning.log)
 raw.step3 <- add.price.per.unit(raw.step3)
