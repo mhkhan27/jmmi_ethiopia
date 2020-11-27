@@ -98,7 +98,51 @@ cl.other <- cl.other %>% filter((is.na(old.value) & !is.na(new.value)) |
 raw.step1 <- apply.changes(raw.step1, cl.other)
 
 ##########################################################################################################
-# Step 5: add columns with conversion from price to price_per_unit
+# Step 5: logical check (item availability vs item sold)
+##########################################################################################################
+
+# CHECK DESCRIPTION: In the early section about item availability, vendors are first asked about the 
+# general availability of every monitored item in the market (A), and are then asked which of these 
+# items they are currently selling (B). If they say they’re selling a particularitem (in B) that they 
+# previously marked “completely unavailable in this marketplace” (in A), this is a clear contradiction 
+# that needs to be corrected.
+
+# FIX: replace with mode of the woreda
+
+# find issues and fixes
+res <- apply(raw.step1, 1, check.availability)
+cl.logical.check1 <- do.call(rbind, res[as.logical(lapply(res, function(x) nrow(x)>0))]) %>% 
+  left_join(select(raw.step1, uuid, adm3_woreda), by="uuid")
+cl.logical.check1$new.value <- apply(cl.logical.check1, 1, function(x){
+  d <- as.vector(filter(raw.step1, adm3_woreda==x["adm3_woreda"])[[x["variable"]]])
+  d <- d[!is.na(d) & (d %in% c("fully_available", "limited"))]
+  if (length(d)==0) return("limited")
+  else return(get.mode(d))
+})
+cl.logical.check1 <- cl.logical.check1 %>% select(-c("item", "adm3_woreda"))
+
+# apply fixes
+raw.step1 <- apply.changes(raw.step1, cl.logical.check1)
+
+##########################################################################################################
+# Step 6: logical check ("water" wrongly reported in type_vendor)
+##########################################################################################################
+
+# DESCRIPTION: if water is wrongly reported in type_vendor, the "water" sections should be set to NA.
+
+# DETECTION: both truck_capacity and water_price_base are 0
+
+# find uuid with issues
+uuid.nok <- filter(raw.step1, as.numeric(truck_capacity)==0 & as.numeric(water_price_base)==0)[["uuid"]]
+
+# generate cleaning log with the required changes
+cl.logical.check2 <- do.call(rbind, lapply(uuid.nok, function(x) remove.water.responses(x)))
+
+# apply changes
+raw.step1 <- apply.changes(raw.step1, cl.logical.check2)
+
+##########################################################################################################
+# Step 7: add columns with conversion from price to price_per_unit
 ##########################################################################################################
 
 # get list of nonstandard_unit reported in the dataset
@@ -112,7 +156,7 @@ raw.step1 <- to.double(raw.step1, columns=get.numeric.columns())
 raw.step1 <- add.price.per.unit(raw.step1)
 
 ##########################################################################################################
-# Step 6: Outliers detection (prices)
+# Step 8: Outliers detection (prices)
 ##########################################################################################################
 
 # get list of columns to be checked for outliers
@@ -141,7 +185,7 @@ cleaning.log.outliers <- create.outliers.cleaning.log(outliers)
 generate.price.outliers.boxplot()
 
 ##########################################################################################################
-# Step 7: Outliers detection (other numeric variables)
+# Step 9: Outliers detection (other numeric variables)
 ##########################################################################################################
 
 # get list of columns to be checked for outliers
@@ -164,35 +208,9 @@ cleaning.log.outliers.generic <- outliers[!duplicated(outliers$mid),] %>% select
 # create boxplot to visually inspect outlier detection performance
 generate.generic.outliers.boxplot()
 
-##########################################################################################################
-# Step 8: Logical checks
-##########################################################################################################
-
-# CHECK DESCRIPTION: In the early section about item availability, vendors are first asked about the 
-# general availability of every monitored item in the market (A), and are then asked which of these 
-# items they are currently selling (B). If they say they’re selling a particularitem (in B) that they 
-# previously marked “completely unavailable in this marketplace” (in A), this is a clear contradiction 
-# that needs to be corrected.
-
-# FIX: replace with mode of the woreda
-
-# find issues and fixes
-res <- apply(raw.step1, 1, check.availability)
-issues <- do.call(rbind, res[as.logical(lapply(res, function(x) nrow(x)>0))]) %>% 
-  left_join(select(raw.step1, uuid, adm3_woreda), by="uuid")
-issues$new.value <- apply(issues, 1, function(x){
-  d <- as.vector(filter(raw.step1, adm3_woreda==x["adm3_woreda"])[[x["variable"]]])
-  d <- d[!is.na(d) & (d %in% c("fully_available", "limited"))]
-  if (length(d)==0) return("limited")
-  else return(get.mode(d))
-})
-issues <- issues %>% select(-c("item", "adm3_woreda"))
-
-# apply fixes
-raw.step1 <- apply.changes(raw.step1, issues)
 
 ##########################################################################################################
-# Step 9: Produce file with follow-up requests to be sent to partners
+# Step 10: Produce file with follow-up requests to be sent to partners
 ##########################################################################################################
 
 cleaning.log <- rbind(cleaning.log.outliers, cleaning.log.outliers.generic)
@@ -208,7 +226,7 @@ cleaning.log.cols <- c("uuid", "date", "partner", "enumerator_id",
 cleaning.log <- select(cleaning.log, all_of(cleaning.log.cols))
 
 ##########################################################################################################
-# Step 10: save dataset_checked, split follow up requests and send emails to partners
+# Step 11: save dataset_checked, split follow up requests and send emails to partners
 ##########################################################################################################
 
 # save dataset_checked

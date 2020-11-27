@@ -2,6 +2,18 @@ get.all.items <- function(){
   return((tool.choices %>% filter(list_name=="all_items", name!="water"))$name)
 }
 
+remove.water.responses <- function(uuid){
+  cols <- colnames(raw.step1)[str_detect(colnames(raw.step1), "water") & 
+                                !(colnames(raw.step1) %in% c("type_vendor/water", 
+                                                             "availability_hygiene_water"))]
+  cl <- rbind(
+    data.frame(uuid=uuid, variable="type_vendor", 
+               new.value=trimws(str_remove(get.value(raw.step1, uuid.nok, "type_vendor"), "water"))),
+    data.frame(uuid=uuid, variable="type_vendor/water", new.value="0"),
+    do.call(rbind, lapply(cols, function(x) data.frame(uuid=uuid, variable=x, new.value=NA))))
+  return(cl)
+}
+
 get.numeric.columns <- function(){
   cols <- c(as.character(lapply(all.items, function(x) paste0(x, "_nonstandard_unit_g"))),
             as.character(lapply(all.items, function(x) paste0(x, "_nonstandard_unit_ml"))),
