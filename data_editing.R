@@ -9,8 +9,7 @@ source("./config.R")
 ##########################################################################################################
 
 # load dataset_checked
-raw.step1 <- read_excel(paste0(directory.checking, "dataset_checked.xlsx"), guess_max=20000) %>% 
-  mutate_if(is.logical, as.character)
+raw.step1 <- read_excel(paste0(directory.checking, "dataset_checked.xlsx"), col_types = "text")
 raw.step1 <- to.double(raw.step1, columns=get.numeric.columns())
 
 # load and combine responses

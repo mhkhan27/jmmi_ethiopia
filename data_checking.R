@@ -8,7 +8,6 @@ source("./config.R")
 # Step 1: load dataset
 ##########################################################################################################
 
-# load RAW dataset
 raw <- read_excel(filename.raw.dataset, sheet=1, col_types = "text") %>% rename(uuid="_uuid")
 
 ##########################################################################################################
@@ -30,6 +29,9 @@ if (nrow(raw.checks.flagged) > 0) stop("Surveys with duration < 10 minutes were 
 ##########################################################################################################
 # Step 3: GPS check
 ##########################################################################################################
+
+# --> do check only for face-to-face
+# --> what to do for paper-form submitted from home?
 
 # 1) load shapes layers
 woredas <-  st_transform(st_read("resources/ETH_COD_SHP/eth_admbnda_adm3_csa_bofed_20201008.shp"), crs = 4326)

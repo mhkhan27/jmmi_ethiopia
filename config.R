@@ -29,7 +29,7 @@ directory.outputs <- "output/"
 ##########################################################################################################
 
 # load tool
-tool.survey <- read_excel(filename.tool, sheet="survey")
+tool.survey <- read_excel(filename.tool, sheet="survey") %>% filter(!is.na(name))
 tool.choices <- read_excel(filename.tool, sheet="choices") %>% filter(!is.na(list_name))
 
 # get list of all food and hygiene items (excluding water) and their standard units
