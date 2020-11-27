@@ -66,8 +66,8 @@ cl.adm1 <- cl.adm3 %>%
 cl.gps <- rbind(cl.adm1, cl.adm2, cl.adm3)
 
 # 6) apply changes
-# raw.step1 <- apply.changes(raw, cl.gps)
-raw.step1 <- raw
+# raw.step1 <- apply.changes(raw, cl.gps)  # <-- uncomment to apply GPS checks
+raw.step1 <- raw  # <-- uncomment to ignore GPS checks
 
 ##########################################################################################################
 # Step 4: fix nonstandard_unit wrongly reported as "other" <-- MANUALLY!!
@@ -79,7 +79,7 @@ cols <- colnames(raw.step1)[grepl("_nonstandard_unit_other", colnames(raw.step1)
 other <- raw.step1[c("uuid", cols)] %>% 
   pivot_longer(cols=all_of(cols), names_to="variable", values_to="old.value") %>% 
   filter(!is.na(old.value))
-# --> open other data.frame and manually recode existing units
+# --> open other data.frame and manually recode existing units in cl.other below
 cl.other <- rbind(
   get.entry.other.changes(uuid="c85a6190-052c-437b-aa06-7e46488804c0", item="bath_soap", 
                           standard_unit="no", nonstandard_unit="piece", 
@@ -90,7 +90,7 @@ cl.other <- rbind(
   get.entry.other.changes(uuid="cc319a16-54d3-4eea-b758-aadd2b740306", item="bleach", 
                           standard_unit="no", nonstandard_unit="gram", 
                           nonstandard_unit_g=20, nonstandard_unit_ml=NA, nonstandard_unit_other=NA)) 
-cl.other$old.value <- apply(cl, 1, function(x) get.value(raw.step1, x["uuid"], x["variable"]))
+cl.other$old.value <- apply(cl.other, 1, function(x) get.value(raw.step1, x["uuid"], x["variable"]))
 cl.other <- cl.other %>% filter((is.na(old.value) & !is.na(new.value)) |
                                   (!is.na(old.value) & is.na(new.value)) |
                                   (!is.na(old.value) & !is.na(new.value) & old.value!=new.value))
@@ -168,13 +168,13 @@ generate.generic.outliers.boxplot()
 # Step 8: Logical checks
 ##########################################################################################################
 
-# - CHECK DESCRIPTION: In the early section about item availability, vendors are first asked about the 
+# CHECK DESCRIPTION: In the early section about item availability, vendors are first asked about the 
 # general availability of every monitored item in the market (A), and are then asked which of these 
 # items they are currently selling (B). If they say they’re selling a particularitem (in B) that they 
 # previously marked “completely unavailable in this marketplace” (in A), this is a clear contradiction 
 # that needs to be corrected.
 
-# - FIX: replace with mode of the woreda
+# FIX: replace with mode of the woreda
 
 # find issues and fixes
 res <- apply(raw.step1, 1, check.availability)
@@ -195,7 +195,7 @@ raw.step1 <- apply.changes(raw.step1, issues)
 # Step 9: Produce file with follow-up requests to be sent to partners
 ##########################################################################################################
 
-cleaning.log <- rbind(cleaning.log.outliers, cleaning.log.outliers.generic, cleaning.log.logical)
+cleaning.log <- rbind(cleaning.log.outliers, cleaning.log.outliers.generic)
 cleaning.log$new.value <- NA
 cleaning.log$explanation <- NA
 cleaning.log <- left_join(cleaning.log, 
