@@ -1,21 +1,15 @@
 # set wd to this script's locations
 setwd(dirname(rstudioapi::getActiveDocumentContext()$path))
 
-# load configuration script (libraries, functions, directories, etc.)  <-- update at each round
+# load configuration script (libraries, functions, directories, tool, etc.)  <-- update at each round
 source("./config.R")
 
-
 ##########################################################################################################
-# Step 1: Load tool and dataset
+# Step 1: load dataset
 ##########################################################################################################
-
-# load tool
-tool.survey <- read_excel(filename.tool, sheet="survey")
-tool.choices <- read_excel(filename.tool, sheet="choices") %>% filter(!is.na(list_name))
 
 # load RAW dataset
 raw <- read_excel(filename.raw.dataset, sheet=1, col_types = "text") %>% rename(uuid="_uuid")
-
 
 ##########################################################################################################
 # Step 2: check for duplicates and short survey duration --> triggers an error
@@ -56,7 +50,7 @@ m <- leaflet() %>%
   addCircleMarkers(data = survey.points, radius=5, color = "#FF00FF", stroke=F, fillOpacity = 0.5, 
                    label = paste0(survey.points$partner, "_", survey.points$adm3_woreda)) %>% 
   addTiles()
-mapshot(m, file=paste0("output/", assessment.month, "_map_samples.pdf"))
+mapshot(m, file=paste0(directory.checking, assessment.month, "_map_samples.pdf"))
 
 # 4) check that reported woreda is within the woreda polygon
 raw.check <- st_drop_geometry(survey.points) %>% 
@@ -86,11 +80,9 @@ other <- raw.step1[c("uuid", cols)] %>%
   pivot_longer(cols=all_of(cols), names_to="variable", values_to="old.value") %>% 
   filter(!is.na(old.value))
 # --> open other data.frame and manually recode existing units
-cl.other <- rbind(cl.other, 
+cl.other <- rbind(cl.other,
                   data.frame(uuid="c85a6190-052c-437b-aa06-7e46488804c0",
-                             variable="bath_soap_standard_unit", old.value="no", new.value="yes"),
-                  data.frame(uuid="c85a6190-052c-437b-aa06-7e46488804c0",
-                             variable="bath_soap_nonstandard_unit", old.value="other", new.value=NA),
+                             variable="bath_soap_nonstandard_unit", old.value="other", new.value="piece"),
                   data.frame(uuid="c85a6190-052c-437b-aa06-7e46488804c0",
                              variable="bath_soap_nonstandard_unit_other", old.value="Pieces", new.value=NA))
 # apply changes
@@ -100,24 +92,12 @@ raw.step1 <- apply.changes(raw.step1, cl.other)
 # Step 5: add columns with conversion from price to price_per_unit
 ##########################################################################################################
 
-# get list of all food and hygiene items (excluding water) and their standard units
-all.items <- (tool.choices %>% filter(list_name=="all_items", name!="water"))$name
-standard.units <- get.list.std.units()
-# -> check that standard.units are correctly extracted from the tool
-
 # get list of nonstandard_unit reported in the dataset
-# -> check if calculate_price_per_unit needs to be updated to include new units
 non.standard.units <- get.list.nstd.units()
+# -> check if calculate_price_per_unit needs to be updated to include new units
 
 # convert relevant columns to numeric
-cols <- c(as.character(lapply(all.items, function(x) paste0(x, "_nonstandard_unit_g"))),
-          as.character(lapply(all.items, function(x) paste0(x, "_nonstandard_unit_ml"))),
-          as.character(lapply(all.items, function(x) paste0(x, "_price"))),
-          as.character(lapply(all.items, function(x) paste0(x, "_stock_days"))),
-          as.character(lapply(all.items, function(x) paste0(x, "_resupply_days"))),
-          "truck_capacity", 
-          "water_price_base", "water_price_5km", "water_price_10km")
-raw.step1 <- to.double(raw.step1, columns=cols)
+raw.step1 <- to.double(raw.step1, columns=get.numeric.columns())
 
 # calculate price per unit (i.e. conversion for prices not collected in standard units)
 raw.step1 <- add.price.per.unit(raw.step1)
@@ -155,9 +135,11 @@ generate.price.outliers.boxplot()
 # Step 7: Outliers detection (other numeric variables)
 ##########################################################################################################
 
+# get list of columns to be checked for outliers
 cols.outliers.gen <- c(as.character(lapply(all.items, function(x) paste0(x, "_stock_days"))),
                     as.character(lapply(all.items, function(x) paste0(x, "_resupply_days"))))
 
+# detect outliers
 outliers.sub1 <- raw.step1 %>% 
   select("uuid", all_of(cols.outliers.gen)) %>% 
   detect.outliers(., method="sd-linear", n.sd=3)
@@ -205,7 +187,6 @@ cleaning.log.cols <- c("uuid", "date", "partner", "enumerator_id",
                        "item", "variable", "old.value", "new.value", "explanation")
 cleaning.log <- select(cleaning.log, all_of(cleaning.log.cols))
 
-
 ##########################################################################################################
 # Step 10: save dataset_checked, split follow up requests and send emails to partners
 ##########################################################################################################
@@ -217,4 +198,3 @@ write.xlsx(raw.step1, paste0(directory.checking, "dataset_checked.xlsx"))
 for (p in unique(cleaning.log$partner)){
   save.follow.up.requests(cl=filter(cleaning.log, partner==p), partner=p)
 }
-

@@ -1,3 +1,18 @@
+get.all.items <- function(){
+  return((tool.choices %>% filter(list_name=="all_items", name!="water"))$name)
+}
+
+get.numeric.columns <- function(){
+  cols <- c(as.character(lapply(all.items, function(x) paste0(x, "_nonstandard_unit_g"))),
+            as.character(lapply(all.items, function(x) paste0(x, "_nonstandard_unit_ml"))),
+            as.character(lapply(all.items, function(x) paste0(x, "_price"))),
+            as.character(lapply(all.items, function(x) paste0(x, "_stock_days"))),
+            as.character(lapply(all.items, function(x) paste0(x, "_resupply_days"))),
+            "truck_capacity", 
+            "water_price_base", "water_price_5km", "water_price_10km")
+  return(cols)
+}
+
 get.list.std.units <- function(){
   standard.units <- do.call(rbind, lapply(all.items, function(x) {
     variable <- paste0(x, "_standard_unit")
@@ -117,7 +132,7 @@ generate.price.outliers.boxplot <- function(){
     geom_point(aes(x=adm0, y=(as.numeric(value))), 
                alpha=f.alpha(df$detected), colour=f.colour(df$detected)) +
     facet_wrap(~variable, scales="free_y", nrow = 6, ncol = 3)
-  ggsave(paste0("output/", assessment.month, "_outlier_analysis_prices.pdf"), g, 
+  ggsave(paste0(directory.checking, assessment.month, "_outlier_analysis_prices.pdf"), g, 
          width = 40, height = 40, units = "cm", device="pdf")
 }
 
@@ -135,7 +150,7 @@ generate.generic.outliers.boxplot <- function(){
     geom_point(aes(x=adm0, y=(as.numeric(value))), 
                alpha=f.alpha(df$detected), colour=f.colour(df$detected)) +
     facet_wrap(~variable, scales="free_y", nrow = 6, ncol = 4)
-  ggsave(paste0("output/", assessment.month, "_outlier_analysis_generic.pdf"), g, 
+  ggsave(paste0(directory.checking, assessment.month, "_outlier_analysis_generic.pdf"), g, 
          width = 40, height = 40, units = "cm", device="pdf")
 }
 

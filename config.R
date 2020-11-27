@@ -23,3 +23,16 @@ directory.responses <- "output/partner_responses/"
 directory.final <- "output/final/"
 directory.checking <- "output/checking/"
 directory.outputs <- "output/"
+
+##########################################################################################################
+# LOAD TOOL AND GENERATE VARIABLES BASED ON TOOL
+##########################################################################################################
+
+# load tool
+tool.survey <- read_excel(filename.tool, sheet="survey")
+tool.choices <- read_excel(filename.tool, sheet="choices") %>% filter(!is.na(list_name))
+
+# get list of all food and hygiene items (excluding water) and their standard units
+all.items <- get.all.items()
+standard.units <- get.list.std.units()
+# -> check that standard.units are correctly extracted from the tool
