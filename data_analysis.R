@@ -14,20 +14,6 @@ data <- read_excel(paste0(directory.final, assessment.month, "_cleaned_dataset.x
 # Step 2: aggregate at woreda level <-- basis for whole analysis
 ##########################################################################################################
 
-get.mode <- function(x){
-  uniqx <- unique(x)
-  uniqx[which.max(tabulate(match(x, uniqx)))]
-}
-
-get.availability <- function(x){
-  if ("fully_available" %in% x) return("available")
-  if ("limited" %in% x) return("limited")
-  if ("unavailable" %in% x) return("unavailable")
-  return("no data")
-}
-
-get.at.least.one <- function(x) if ("1" %in% x) return("1") else return("0")
-
 a<-data %>% group_by(adm3_woreda) %>% group_map(~(aggregate.woreda(.y$adm3_woreda, .x)))
 
 a <- lapply(colnames(data)[27:432], function(x){

@@ -13,6 +13,16 @@ get.numeric.columns <- function(){
   return(cols)
 }
 
+get.entry.other.changes <- function(uuid, item, standard_unit, nonstandard_unit, 
+                                    nonstandard_unit_g, nonstandard_unit_ml, nonstandard_unit_other){
+  cl <- rbind(data.frame(uuid=uuid, variable=paste0(item, "_standard_unit"), new.value=standard_unit),
+              data.frame(uuid=uuid, variable=paste0(item, "_nonstandard_unit"), new.value=nonstandard_unit),
+              data.frame(uuid=uuid, variable=paste0(item, "_nonstandard_unit_g"), new.value=nonstandard_unit_g),
+              data.frame(uuid=uuid, variable=paste0(item, "_nonstandard_unit_ml"), new.value=nonstandard_unit_ml),
+              data.frame(uuid=uuid, variable=paste0(item, "_nonstandard_unit_other"), new.value=nonstandard_unit_other))
+  return(cl)
+}
+
 get.list.std.units <- function(){
   standard.units <- do.call(rbind, lapply(all.items, function(x) {
     variable <- paste0(x, "_standard_unit")
@@ -203,14 +213,14 @@ detect.outliers <- function(df, method="sd", n.sd=3){
 }
 
 check.availability <- function(r){
-  if (!is.na(r["food_sold"])){
+  if (!is.na(r["food_sold"]) & r["food_sold"]!="none"){
     food.sold <- str_split(r["food_sold"], " ")[[1]]
     food.sold[food.sold=="goat_meat"] <- "goatmeat"
     food.sold[food.sold=="vegetables_leafy_darkgreen"] <- "vegetables"
     food.sold[food.sold=="cooking_oil"] <- "cookingoil"
     cols.food <- as.character(lapply(food.sold, function(x) paste0("availability_food_", x)))
   } else cols.food <- c()
-  if (!is.na(r["hygiene_sold"])){
+  if (!is.na(r["hygiene_sold"]) & r["hygiene_sold"]!="none"){
     hygiene.sold <- str_split(r["hygiene_sold"], " ")[[1]]
     hygiene.sold[hygiene.sold=="bath_soap"] <- "bathsoap"
     cols.hygiene <- as.character(lapply(hygiene.sold, function(x) paste0("availability_hygiene_", x)))
@@ -297,3 +307,23 @@ get.cleaning.log <- function(x, y){
   }
   return(cl)
 }
+
+############################################################################################################
+############################################################################################################
+############################################################################################################
+
+# FUNCTIONS FOR DATA ANALYSIS
+
+get.mode <- function(x){
+  uniqx <- unique(x)
+  uniqx[which.max(tabulate(match(x, uniqx)))]
+}
+
+get.availability <- function(x){
+  if ("fully_available" %in% x) return("available")
+  if ("limited" %in% x) return("limited")
+  if ("unavailable" %in% x) return("unavailable")
+  return("no data")
+}
+
+get.at.least.one <- function(x) if ("1" %in% x) return("1") else return("0")

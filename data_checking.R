@@ -30,9 +30,6 @@ if (nrow(raw.checks.flagged) > 0) stop("Surveys with duration < 10 minutes were 
 # Step 3: GPS check
 ##########################################################################################################
 
-# --> do check only for face-to-face
-# --> what to do for paper-form submitted from home?
-
 # 1) load shapes layers
 woredas <-  st_transform(st_read("resources/ETH_COD_SHP/eth_admbnda_adm3_csa_bofed_20201008.shp"), crs = 4326)
 zones <-  st_transform(st_read("resources/ETH_COD_SHP/eth_admbnda_adm2_csa_bofed_20201008.shp"), crs = 4326)
@@ -52,7 +49,7 @@ m <- leaflet() %>%
   addCircleMarkers(data = survey.points, radius=5, color = "#FF00FF", stroke=F, fillOpacity = 0.5, 
                    label = paste0(survey.points$partner, "_", survey.points$adm3_woreda)) %>% 
   addTiles()
-mapshot(m, file=paste0(directory.checking, assessment.month, "_map_samples.pdf"))
+mapshot(m, file=paste0(directory.checking, assessment.month, "_map_samples.pdf"))  # <-- takes 1 minute
 
 # 4) check that reported woreda is within the woreda polygon
 raw.check <- st_drop_geometry(survey.points) %>% 
@@ -69,7 +66,8 @@ cl.adm1 <- cl.adm3 %>%
 cl.gps <- rbind(cl.adm1, cl.adm2, cl.adm3)
 
 # 6) apply changes
-raw.step1 <- apply.changes(raw, cl.gps)
+# raw.step1 <- apply.changes(raw, cl.gps)
+raw.step1 <- raw
 
 ##########################################################################################################
 # Step 4: fix nonstandard_unit wrongly reported as "other" <-- MANUALLY!!
@@ -82,11 +80,20 @@ other <- raw.step1[c("uuid", cols)] %>%
   pivot_longer(cols=all_of(cols), names_to="variable", values_to="old.value") %>% 
   filter(!is.na(old.value))
 # --> open other data.frame and manually recode existing units
-cl.other <- rbind(cl.other,
-                  data.frame(uuid="c85a6190-052c-437b-aa06-7e46488804c0",
-                             variable="bath_soap_nonstandard_unit", old.value="other", new.value="piece"),
-                  data.frame(uuid="c85a6190-052c-437b-aa06-7e46488804c0",
-                             variable="bath_soap_nonstandard_unit_other", old.value="Pieces", new.value=NA))
+cl.other <- rbind(
+  get.entry.other.changes(uuid="c85a6190-052c-437b-aa06-7e46488804c0", item="bath_soap", 
+                          standard_unit="no", nonstandard_unit="piece", 
+                          nonstandard_unit_g=NA, nonstandard_unit_ml=NA, nonstandard_unit_other=NA),
+  get.entry.other.changes(uuid="cc319a16-54d3-4eea-b758-aadd2b740306", item="bath_soap", 
+                          standard_unit="no", nonstandard_unit="gram", 
+                          nonstandard_unit_g=200, nonstandard_unit_ml=NA, nonstandard_unit_other=NA),
+  get.entry.other.changes(uuid="cc319a16-54d3-4eea-b758-aadd2b740306", item="bleach", 
+                          standard_unit="no", nonstandard_unit="gram", 
+                          nonstandard_unit_g=20, nonstandard_unit_ml=NA, nonstandard_unit_other=NA)) 
+cl.other$old.value <- apply(cl, 1, function(x) get.value(raw.step1, x["uuid"], x["variable"]))
+cl.other <- cl.other %>% filter((is.na(old.value) & !is.na(new.value)) |
+                                  (!is.na(old.value) & is.na(new.value)) |
+                                  (!is.na(old.value) & !is.na(new.value) & old.value!=new.value))
 # apply changes
 raw.step1 <- apply.changes(raw.step1, cl.other)
 
@@ -161,17 +168,28 @@ generate.generic.outliers.boxplot()
 # Step 8: Logical checks
 ##########################################################################################################
 
-# In the early section about item availability, vendors are first asked about the general 
-# availability of every monitored item in the market (A), and are then asked which of 
-# these items they are currently selling (B). If they say they’re selling a particular 
-# item (in B) that they previously marked “completely unavailable in this marketplace” 
-# (in A), this is a clear contradiction that needs to be corrected.
+# - CHECK DESCRIPTION: In the early section about item availability, vendors are first asked about the 
+# general availability of every monitored item in the market (A), and are then asked which of these 
+# items they are currently selling (B). If they say they’re selling a particularitem (in B) that they 
+# previously marked “completely unavailable in this marketplace” (in A), this is a clear contradiction 
+# that needs to be corrected.
 
+# - FIX: replace with mode of the woreda
+
+# find issues and fixes
 res <- apply(raw.step1, 1, check.availability)
-cleaning.log.logical <- do.call(rbind, res[as.logical(lapply(res, function(x) nrow(x)>0))]) %>% 
-  mutate(check.id="Logical",
-         issue="This item was reported to be completely unavailable in the marketplace, but it was 
-         reported to be sold this week. Please correct the availability (fully_available or limited).")
+issues <- do.call(rbind, res[as.logical(lapply(res, function(x) nrow(x)>0))]) %>% 
+  left_join(select(raw.step1, uuid, adm3_woreda), by="uuid")
+issues$new.value <- apply(issues, 1, function(x){
+  d <- as.vector(filter(raw.step1, adm3_woreda==x["adm3_woreda"])[[x["variable"]]])
+  d <- d[!is.na(d) & (d %in% c("fully_available", "limited"))]
+  if (length(d)==0) return("limited")
+  else return(get.mode(d))
+})
+issues <- issues %>% select(-c("item", "adm3_woreda"))
+
+# apply fixes
+raw.step1 <- apply.changes(raw.step1, issues)
 
 ##########################################################################################################
 # Step 9: Produce file with follow-up requests to be sent to partners
