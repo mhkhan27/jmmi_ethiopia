@@ -210,7 +210,7 @@ check.availability <- function(r){
   } else return(data.frame())
 }
 
-save.follow.up.requests <- function(cl){
+save.follow.up.requests <- function(cl, partner){
   # save follow-up requests
   wb <- createWorkbook()
   addWorksheet(wb, "Follow-up")
@@ -239,7 +239,8 @@ save.follow.up.requests <- function(cl){
       addStyle(wb, "Follow-up", style=style.input, rows=r:(r+1), cols=col.id+2)
     } else random.color=""
   }
-  saveWorkbook(wb, filename.out.fu.requests, overwrite = TRUE)
+  filename <- paste0(directory.requests, assessment.month, "_", partner, "_follow_up_requests.xlsx")
+  saveWorkbook(wb, filename, overwrite = TRUE)
 }
 
 get.entry.log <- function(uuid, item, std.unit, nstd.unit, nstd.unit.g, nstd.unit.ml, price){
