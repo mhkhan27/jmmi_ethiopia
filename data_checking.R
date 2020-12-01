@@ -70,7 +70,7 @@ cl.gps <- rbind(cl.adm1, cl.adm2, cl.adm3)
 raw.step1 <- raw  # <-- uncomment to ignore GPS checks
 
 ##########################################################################################################
-# Step 4: fix nonstandard_unit wrongly reported as "other" <-- MANUALLY!!
+# Step 4: recode/remove nonstandard_unit reported as "other" <-- MANUALLY
 ##########################################################################################################
 
 # generate dataframe with all other responses for the nonstandart_unit
@@ -79,7 +79,8 @@ cols <- colnames(raw.step1)[grepl("_nonstandard_unit_other", colnames(raw.step1)
 other <- raw.step1[c("uuid", cols)] %>% 
   pivot_longer(cols=all_of(cols), names_to="variable", values_to="old.value") %>% 
   filter(!is.na(old.value))
-# --> open other data.frame and manually recode existing units in cl.other below
+
+# --> open other data.frame and manually recode/remove the responses in cl.other below
 cl.other <- rbind(
   get.entry.other.changes(uuid="c85a6190-052c-437b-aa06-7e46488804c0", item="bath_soap", 
                           standard_unit="no", nonstandard_unit="piece", 
@@ -89,16 +90,28 @@ cl.other <- rbind(
                           nonstandard_unit_g=200, nonstandard_unit_ml=NA, nonstandard_unit_other=NA),
   get.entry.other.changes(uuid="cc319a16-54d3-4eea-b758-aadd2b740306", item="bleach", 
                           standard_unit="no", nonstandard_unit="gram", 
-                          nonstandard_unit_g=20, nonstandard_unit_ml=NA, nonstandard_unit_other=NA)) 
+                          nonstandard_unit_g=20, nonstandard_unit_ml=NA, nonstandard_unit_other=NA),
+  remove.food.item(raw.step1, uuid="cf347092-8ccb-42ef-8a93-ff25aaac6c13", item="beef"),
+  get.entry.other.changes(uuid="2facc454-6ad7-4741-b163-a6965ee6f48c", item="bath_soap", 
+                          standard_unit="no", nonstandard_unit="gram", 
+                          nonstandard_unit_g=200, nonstandard_unit_ml=NA, nonstandard_unit_other=NA),
+  get.entry.other.changes(uuid="a0b6aca2-fb2a-4336-9b4e-44d05a8d7d37", item="bath_soap", 
+                          standard_unit="no", nonstandard_unit="gram", 
+                          nonstandard_unit_g=200, nonstandard_unit_ml=NA, nonstandard_unit_other=NA))
+# add old.valus
 cl.other$old.value <- apply(cl.other, 1, function(x) get.value(raw.step1, x["uuid"], x["variable"]))
-cl.other <- cl.other %>% filter((is.na(old.value) & !is.na(new.value)) |
-                                  (!is.na(old.value) & is.na(new.value)) |
-                                  (!is.na(old.value) & !is.na(new.value) & old.value!=new.value))
+cl.other <- select(cl.other, uuid, variable, old.value, new.value)
+# keep only required changes
+cl.other <- cl.other %>% 
+  filter((is.na(old.value) & !is.na(new.value)) |
+           (!is.na(old.value) & is.na(new.value)) |
+           (!is.na(old.value) & !is.na(new.value) & old.value!=new.value)) %>% 
+  mutate(check.id="Recode.other")
 # apply changes
 raw.step1 <- apply.changes(raw.step1, cl.other)
 
 ##########################################################################################################
-# Step 5: logical check (item availability vs item sold)
+# Step 5: logical check 1 (item availability vs item sold)
 ##########################################################################################################
 
 # CHECK DESCRIPTION: In the early section about item availability, vendors are first asked about the 
@@ -109,7 +122,7 @@ raw.step1 <- apply.changes(raw.step1, cl.other)
 
 # FIX: replace with mode of the woreda
 
-# find issues and fixes
+# find issues and determine fixes
 res <- apply(raw.step1, 1, check.availability)
 cl.logical.check1 <- do.call(rbind, res[as.logical(lapply(res, function(x) nrow(x)>0))]) %>% 
   left_join(select(raw.step1, uuid, adm3_woreda), by="uuid")
@@ -119,13 +132,15 @@ cl.logical.check1$new.value <- apply(cl.logical.check1, 1, function(x){
   if (length(d)==0) return("limited")
   else return(get.mode(d))
 })
-cl.logical.check1 <- cl.logical.check1 %>% select(-c("item", "adm3_woreda"))
+cl.logical.check1 <- cl.logical.check1 %>% 
+  select(-c("item", "adm3_woreda")) %>% 
+  mutate(check.id="Logical.check")
 
 # apply fixes
 raw.step1 <- apply.changes(raw.step1, cl.logical.check1)
 
 ##########################################################################################################
-# Step 6: logical check ("water" wrongly reported in type_vendor)
+# Step 6: logical check 2 ("water" wrongly reported in type_vendor)
 ##########################################################################################################
 
 # DESCRIPTION: if water is wrongly reported in type_vendor, the "water" sections should be set to NA.
@@ -137,12 +152,29 @@ uuid.nok <- filter(raw.step1, as.numeric(truck_capacity)==0 & as.numeric(water_p
 
 # generate cleaning log with the required changes
 cl.logical.check2 <- do.call(rbind, lapply(uuid.nok, function(x) remove.water.responses(x)))
+cl.logical.check2$old.value <- apply(cl.logical.check2, 1, 
+                                     function(x) get.value(raw.step1, x["uuid"], x["variable"]))
+cl.logical.check2 <- select(cl.logical.check2, uuid, variable, old.value, new.value)
+cl.logical.check2 <- cl.logical.check2 %>% 
+  filter((is.na(old.value) & !is.na(new.value)) | (!is.na(old.value) & is.na(new.value)) |
+           (!is.na(old.value) & !is.na(new.value) & old.value!=new.value)) %>% 
+  mutate(check.id="Logical.check")
 
 # apply changes
 raw.step1 <- apply.changes(raw.step1, cl.logical.check2)
 
 ##########################################################################################################
-# Step 7: add columns with conversion from price to price_per_unit
+# Step 7: logical check 3 (check that no reported base prices are 0) --> triggers an error
+##########################################################################################################
+
+raw.check <- raw.step1[c("uuid", all_of(base.prices))] %>% 
+  pivot_longer(cols=all_of(base.prices), names_to="variable", values_to="value") %>% 
+  filter(!is.na(value) & as.numeric(value)==0)
+
+if (nrow(raw.check) > 0) stop("Prices 0 are detected")
+
+##########################################################################################################
+# Step 8: add columns with conversion from price to price_per_unit (basis for price outlier detection)
 ##########################################################################################################
 
 # get list of nonstandard_unit reported in the dataset
@@ -153,16 +185,28 @@ non.standard.units <- get.list.nstd.units()
 raw.step1 <- to.double(raw.step1, columns=get.numeric.columns())
 
 # calculate price per unit (i.e. conversion for prices not collected in standard units)
-raw.step1 <- add.price.per.unit(raw.step1)
+# 1) run with test=T so that unrecognised units will result in -1
+raw.step1 <- add.price.per.unit(raw.step1, test=T)
+# 2) get list of unrecognised units --> fix function calculate_price_per_unit if needed
+raw.check <- raw.step1[c("uuid", all_of(cols.outliers1))] %>% 
+  pivot_longer(cols=all_of(cols.outliers1), names_to="variable", values_to="value") %>% 
+  filter(!is.na(value) & as.numeric(value)==-1)
+raw.check$item <- apply(raw.check, 1, function(x) str_split(x["variable"], "_")[[1]][1])
+raw.check$nonstandard_unit <- apply(raw.check, 1, function(x) 
+  get.value(raw.step1, x["uuid"], paste0(x["item"], "_nonstandard_unit")))
+raw.check$nonstandard_unit_other <- apply(raw.check, 1, function(x) 
+  get.value(raw.step1, x["uuid"], paste0(x["item"], "_nonstandard_unit_other")))
+raw.check <- arrange(raw.check, item, nonstandard_unit, nonstandard_unit_other)
+if (nrow(raw.check) > 0) stop("Some nonstandard units were not converted. Edit calculate_price_per_unit function.")
+# 3) run with test=F to get correct prices per unit
+raw.step1 <- add.price.per.unit(raw.step1, test=F)
+# 4) test price per unit calculations --> open res and inspect results
+test.calculation <- lapply(c(all.items, "water"), function(x) test.price.per.unit(raw.step1, x))
 
 ##########################################################################################################
-# Step 8: Outliers detection (prices)
+# Step 9: Outliers detection (prices)
 ##########################################################################################################
 
-# get list of columns to be checked for outliers
-cols.outliers1 <- c(as.character(lapply(all.items, function(x) paste0(x, "_price_per_unit"))),
-                   "water_price_per_unit", 
-                   "water_price_per_unit_5km", "water_price_per_unit_10km")
 # detect outliers
 outliers.sub1 <- raw.step1 %>% 
   select("uuid", all_of(cols.outliers1)) %>% 
@@ -178,19 +222,15 @@ outliers <- outliers %>% mutate(mid=paste0(uuid, variable))
 outliers <- outliers[!duplicated(outliers$mid),] %>% select(-mid)
 
 # add outliers to cleaning log
-# TODO: check once new data arrives
 cleaning.log.outliers <- create.outliers.cleaning.log(outliers)
 
 # create boxplot to visually inspect outlier detection performance
 generate.price.outliers.boxplot()
+# --> inspect the boxplot to visually spot missed outliers or unlikely ranges
 
 ##########################################################################################################
-# Step 9: Outliers detection (other numeric variables)
+# Step 10: Outliers detection (other numeric variables)
 ##########################################################################################################
-
-# get list of columns to be checked for outliers
-cols.outliers.gen <- c(as.character(lapply(all.items, function(x) paste0(x, "_stock_days"))),
-                    as.character(lapply(all.items, function(x) paste0(x, "_resupply_days"))))
 
 # detect outliers
 outliers.sub1 <- raw.step1 %>% 
@@ -202,15 +242,18 @@ outliers.sub2 <- raw.step1 %>%
 outliers <- rbind(outliers.sub1, outliers.sub2)
 outliers <- outliers %>% mutate(mid=paste0(uuid, variable))
 cleaning.log.outliers.generic <- outliers[!duplicated(outliers$mid),] %>% select(-mid) %>% 
-  mutate(item=NA, check.id="Outlier",
-         issue="Value seems to be too low or to high. Please check/confirm.")
+  mutate(item=NA, check.id="Outlier.generic",
+         issue=ifelse(outlier.type=="high", 
+                      "Value seems to be too high. Please check/confirm.",
+                      "Value seems to be too low Please check/confirm.")) %>% 
+  select(-outlier.type)
 
 # create boxplot to visually inspect outlier detection performance
 generate.generic.outliers.boxplot()
-
+# --> inspect the boxplot to visually spot missed outliers or unlikely ranges
 
 ##########################################################################################################
-# Step 10: Produce file with follow-up requests to be sent to partners
+# Step 11: Produce file with follow-up requests to be sent to partners
 ##########################################################################################################
 
 cleaning.log <- rbind(cleaning.log.outliers, cleaning.log.outliers.generic)
@@ -226,11 +269,25 @@ cleaning.log.cols <- c("uuid", "date", "partner", "enumerator_id",
 cleaning.log <- select(cleaning.log, all_of(cleaning.log.cols))
 
 ##########################################################################################################
-# Step 11: save dataset_checked, split follow up requests and send emails to partners
+# Step 12: save dataset_checked and changes made, split follow up requests and send emails to partners
 ##########################################################################################################
 
 # save dataset_checked
 write.xlsx(raw.step1, paste0(directory.checking, "dataset_checked.xlsx"))
+
+# save summary of number of prices per woreda
+cols<- colnames(raw.step1)[str_detect(colnames(raw.step1), "price_per_unit")]
+summary <- raw.step1 %>% group_by(adm3_woreda) %>% select(cols) %>% summarise_all(~sum(!is.na(.)))
+colnames(summary) <- c("adm3_woreda", str_remove_all(cols, "_price_per_unit"))
+write.xlsx(summary, paste0(directory.checking, "summary_prices_woreda.xlsx"))
+summary <- raw.step1 %>% group_by(adm2_zone) %>% select(cols) %>% summarise_all(~sum(!is.na(.)))
+colnames(summary) <- c("adm2_zone", str_remove_all(cols, "_price_per_unit"))
+write.xlsx(summary, paste0(directory.checking, "summary_prices_zone.xlsx"))
+
+# save changes made to dataset_raw to produce dataset_checked
+# cl <- rbind(cl.gps, cl.other, cl.logical.check1, cl.logical.check2)  # uncomment if gps checks are used
+cl <- rbind(cl.other, cl.logical.check1, cl.logical.check2)  # uncomment if gps checks are not used
+write.xlsx(cl, paste0(directory.checking, "cleaning.log.checking.xlsx"))
 
 # split follow up requests
 for (p in unique(cleaning.log$partner)){

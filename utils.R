@@ -6,6 +6,7 @@ remove.water.responses <- function(uuid){
   cols <- colnames(raw.step1)[str_detect(colnames(raw.step1), "water") & 
                                 !(colnames(raw.step1) %in% c("type_vendor/water", 
                                                              "availability_hygiene_water"))]
+  cols <- c("truck_capacity", cols)
   cl <- rbind(
     data.frame(uuid=uuid, variable="type_vendor", 
                new.value=trimws(str_remove(get.value(raw.step1, uuid.nok, "type_vendor"), "water"))),
@@ -35,6 +36,16 @@ get.entry.other.changes <- function(uuid, item, standard_unit, nonstandard_unit,
   return(cl)
 }
 
+remove.food.item <- function(df, uuid, item){
+  cols <- colnames(df)[str_starts(colnames(df), item)]
+  cl <- rbind(
+    data.frame(uuid=uuid, variable="food_sold", 
+               new.value=trimws(str_remove(get.value(df, uuid, "food_sold"), item))),
+    data.frame(uuid=uuid, variable=paste0("food_sold/", item), new.value="0"),
+    do.call(rbind, lapply(cols, function(x) return(data.frame(uuid=uuid, variable=x, new.value=NA)))))
+  return(cl)
+}
+
 get.list.std.units <- function(){
   standard.units <- do.call(rbind, lapply(all.items, function(x) {
     variable <- paste0(x, "_standard_unit")
@@ -61,20 +72,24 @@ to.double <- function(df, columns){
   return(df)
 }
 
-calculate_price_per_unit <- function(item, standard_unit, non_standard_unit, unit_g, unit_ml, price){
+calculate_price_per_unit <- function(item, standard_unit, non_standard_unit, unit_g, unit_ml, price, test=F){
   case_when(
     standard_unit == "yes" ~ price,
     non_standard_unit == "gram" & item == "bath_soap" ~ price / unit_g * 125,
     non_standard_unit == "gram" & item == "bleach" ~ price / unit_g * 4,
-    non_standard_unit == "gram" ~ price / unit_g * 1000,
-    non_standard_unit == "millilitre" ~ price / unit_ml * 1000,
+    non_standard_unit == "gram" & item != "cooking_oil" ~ price / unit_g * 1000,
+    non_standard_unit == "millilitre" & item == "cooking_oil" ~ price / unit_ml * 1000,
     non_standard_unit == "medeb" & item == "vegetables_leafy_darkgreen" ~ price / 0.5,
     non_standard_unit == "piece" & item == "bath_soap" ~ price,
     non_standard_unit == "piece" & item == "vegetables_leafy_darkgreen" ~ price / 0.5,
+    non_standard_unit == "sachet" & item == "bleach" ~ price,
+    non_standard_unit == "bundle_large" & item == "enset" ~ price,
+    non_standard_unit == "cup_glass" & item == "cooking_oil" ~ price / 200 * 1000,
+    !is.na(standard_unit) & test ~ -1,
     TRUE ~ NA_real_)
 }
 
-add.price.per.unit <- function(df){
+add.price.per.unit <- function(df, test=F){
   for (item in all.items){
     df[[paste0(item, "_price_per_unit")]] <- 
       calculate_price_per_unit(item,
@@ -82,7 +97,7 @@ add.price.per.unit <- function(df){
                                df[[paste0(item, "_nonstandard_unit")]],
                                df[[paste0(item, "_nonstandard_unit_g")]],
                                df[[paste0(item, "_nonstandard_unit_ml")]],
-                               df[[paste0(item, "_price")]])
+                               df[[paste0(item, "_price")]], test)
   }
   # calculate price per unit for water
   df$water_price_per_unit <- df$water_price_base/df$truck_capacity
@@ -97,6 +112,7 @@ create.outliers.cleaning.log <- function(outliers){
     uuid <- as.character(outliers[r, "uuid"])
     variable <- as.character(outliers[r, "variable"])
     item <- str_split(variable, "_price_per_unit")[[1]][1]
+    outlier.type <- as.character(outliers[r, "outlier.type"])
     # get price variable
     if (variable=="water_price_per_unit") price.variable <- "water_price_base"
     else if (variable=="water_price_per_unit_5km") price.variable <- "water_price_5km"
@@ -125,14 +141,17 @@ create.outliers.cleaning.log <- function(outliers){
     }
     cleaning.log.outliers <- rbind(cleaning.log.outliers,
                                    data.frame(uuid=uuid, item=item,
-                                              variable="quantity", old.value=quantity),
+                                              variable="quantity", old.value=quantity, issue=outlier.type),
                                    data.frame(uuid=uuid, item=item,
-                                              variable="unit", old.value=unit),
+                                              variable="unit", old.value=unit, issue=outlier.type),
                                    data.frame(uuid=uuid, item=item,
                                               variable="price",
-                                              old.value=get.value(raw.step1, uuid, price.variable)))
+                                              old.value=get.value(raw.step1, uuid, price.variable),
+                                              issue=outlier.type))
   }
-  cleaning.log.outliers$issue <- "Price seems to be too low or to high. Please check/confirm the quantity, unit, and price."
+  cleaning.log.outliers$issue <- ifelse(cleaning.log.outliers$issue=="high",
+                                        "Price seems to be too high. Please check/confirm the quantity, unit, and price.",
+                                        "Price seems to be too low. Please check/confirm the quantity, unit, and price.")
   cleaning.log.outliers$check.id <- "Outlier.price"
   return(cleaning.log.outliers)
 }
@@ -167,11 +186,12 @@ generate.generic.outliers.boxplot <- function(){
     mutate(detected=ifelse(is.na(detected), F, detected), adm0="national")
   f.alpha <- function(x) return(ifelse(x, 1, 0))
   f.colour <- function(x) return(ifelse(x, "#FF0000", "#00FF00"))
+  num_variables <- length(unique(df$variable))
   g <- ggplot(df) +
     geom_boxplot(aes(x=adm0, y=(as.numeric(value)))) + ylab("Values") +
     geom_point(aes(x=adm0, y=(as.numeric(value))), 
                alpha=f.alpha(df$detected), colour=f.colour(df$detected)) +
-    facet_wrap(~variable, scales="free_y", nrow = 6, ncol = 4)
+    facet_wrap(~variable, scales="free_y", nrow = ceiling(num_variables/4), ncol = 4)
   ggsave(paste0(directory.checking, assessment.month, "_outlier_analysis_generic.pdf"), g, 
          width = 40, height = 40, units = "cm", device="pdf")
 }
@@ -199,26 +219,30 @@ detect.outliers <- function(df, method="sd", n.sd=3){
     df.temp <- data.frame(uuid=df$uuid, value=as.numeric(df[[col]])) %>% filter(!is.na(value))
     if (method=="sd-linear"){
       df.temp <- df.temp %>%
-        mutate(is.outlier=ifelse(value > mean(value, na.rm=T) + n.sd*sd(value, na.rm=T) | 
-                                   value < mean(value, na.rm=T) - n.sd*sd(value, na.rm=T), T, F))
+        mutate(is.outlier.high=value > mean(value, na.rm=T) + n.sd*sd(value, na.rm=T),
+               is.outlier.low=value < mean(value, na.rm=T) - n.sd*sd(value, na.rm=T))
     } else if (method=="sd-log"){
       df.temp <- df.temp %>%
         mutate(col.log=log(value),
-               is.outlier=ifelse(col.log > mean(col.log, na.rm=T) + n.sd*sd(col.log, na.rm=T) | 
-                                   col.log < mean(col.log, na.rm=T) - n.sd*sd(col.log, na.rm=T), T, F))
+               is.outlier.high=col.log > mean(col.log, na.rm=T) + n.sd*sd(col.log, na.rm=T),
+               is.outlier.low=col.log < mean(col.log, na.rm=T) - n.sd*sd(col.log, na.rm=T))
     } else if (method=="iqr-linear") {
       df.temp <- df.temp %>%
-        mutate(is.outlier=ifelse(value > quantile(value, 0.75) + 1.5*IQR(value) |
-                                   value < quantile(value, 0.25) - 1.5*IQR(value), T, F))
+        mutate(is.outlier.high=value > quantile(value, 0.75) + 1.5*IQR(value),
+               is.outlier.low=value < quantile(value, 0.25) - 1.5*IQR(value))
     } else if (method=="iqr-log") {
       df.temp <- df.temp %>%
         mutate(col.log=log(value),
-               is.outlier=ifelse(col.log > quantile(col.log, 0.75) + 1.5*IQR(col.log) |
-                                   col.log < quantile(col.log, 0.25) - 1.5*IQR(col.log), T, F))
+               is.outlier.high=col.log > quantile(col.log, 0.75) + 1.5*IQR(col.log),
+               is.outlier.low=col.log < quantile(col.log, 0.25) - 1.5*IQR(col.log))
     } else stop("Method unknown")
-    df.temp <- filter(df.temp, is.outlier) %>% 
-      mutate(variable=col, old.value=value) %>%
-      select(uuid, variable, old.value)
+    df.temp <- df.temp %>% 
+      pivot_longer(c("is.outlier.high", "is.outlier.low"), 
+                   names_to="outlier.type", values_to="is.outlier") %>% 
+      filter(is.outlier) %>% 
+      mutate(variable=col, old.value=value,
+             outlier.type=ifelse(outlier.type=="is.outlier.high", "high", "low")) %>% 
+      select(uuid, variable, old.value, outlier.type)
     res <- rbind(res, df.temp)
   }
   return(res)
@@ -333,3 +357,23 @@ get.availability <- function(x){
 }
 
 get.at.least.one <- function(x) if ("1" %in% x) return("1") else return("0")
+
+test.price.per.unit <- function(df, item){
+  if (item=="water"){
+    df <- df %>% 
+      select("truck_capacity", "water_price_base", "water_price_5km", "water_price_10km",
+             "water_price_per_unit", "water_price_per_unit_5km", "water_price_per_unit_10km") %>% 
+      filter(!is.na(truck_capacity))
+  } else{
+    df <- df %>% 
+      select(paste0(item, "_standard_unit"), 
+             paste0(item, "_nonstandard_unit"),
+             paste0(item, "_nonstandard_unit_g"),
+             paste0(item, "_nonstandard_unit_ml"),
+             paste0(item, "_nonstandard_unit_other"),
+             paste0(item, "_price"),
+             paste0(item, "_price_per_unit")) %>% 
+      filter(!is.na(!!sym(paste0(item, "_standard_unit"))))
+  }
+  return(df)
+}
