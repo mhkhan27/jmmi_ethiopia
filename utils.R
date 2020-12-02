@@ -196,10 +196,18 @@ generate.generic.outliers.boxplot <- function(){
          width = 40, height = 40, units = "cm", device="pdf")
 }
 
-get.value <- function(df, uuid, col){
+get.value.old <- function(df, uuid, col){
   col.type <- class(df[[col]])
   if (col.type=="numeric") return(as.numeric(df[df$uuid==uuid, col]))
   else return(as.character(df[df$uuid==uuid, col]))
+}
+
+get.value <- function(df, idx.col, idx, col){
+  col.type <- class(df[[col]])
+  if (col.type=="numeric") res <- as.numeric(df[df[[idx.col]]==idx, col])
+  else res <- as.character(df[df[[idx.col]]==idx, col])
+  if (length(res)==1) return(res)
+  else stop("Multiple matches")
 }
 
 apply.changes <- function(df, cleaning.log){
@@ -376,4 +384,54 @@ test.price.per.unit <- function(df, item){
       filter(!is.na(!!sym(paste0(item, "_standard_unit"))))
   }
   return(df)
+}
+
+analyse.select_one <- function(df, admin.col, variable){
+  d <- df %>% 
+    filter(!is.na(!!sym(variable))) %>% 
+    group_by(!!sym(admin.col), !!sym(variable)) %>%
+    summarise(n = n()) %>% 
+    mutate(proportion = n / sum(n)) %>% ungroup() %>% 
+    select(-n) %>% 
+    mutate(!!variable := paste0(variable, ".", !!sym(variable))) %>% 
+    pivot_wider(names_from=variable, values_from=proportion) %>% 
+    mutate_if(is.numeric, ~replace_na(., 0))
+  return(d)
+}
+analyse.select_multiple <- function(df, admin.col, variable){
+  cols <- colnames(df)[str_starts(colnames(df), variable)]
+  d <- df %>% 
+    filter(!is.na(!!sym(cols[1]))) %>% 
+    group_by(!!sym(admin.col)) %>%
+    mutate(i=1) %>% 
+    summarise_all(~sum(as.numeric(.))/sum(i)) %>% 
+    select(-i)
+  colnames(d) <- str_replace(colnames(d), "/", ".")
+  return(d)
+}
+analyse.numeric <- function(df, admin.col, variable){
+  d <- df %>% 
+    filter(!is.na(!!sym(variable))) %>% 
+    group_by(!!sym(admin.col)) %>%
+    summarise(!!variable := median(!!sym(variable)))
+  return(d)
+}
+run.analysis <- function(data, admin.output){
+  indicators <- data.frame(col.name=colnames(data)) %>% 
+    filter(!(col.name %in% c("adm1_region", "adm2_zone", "adm3_woreda")))
+  indicators$variable <- apply(indicators, 1, function(x) str_split(x, "/")[[1]][1])
+  if (admin.output=="adm0_national") data$adm0_national="ET"
+  r <- lapply(unique(indicators$variable), function(variable){
+    if (variable %in% tool.survey$name){
+      q.type <- str_split(get.value(tool.survey, "name", variable, "type"), " ")[[1]][1]
+    } else if (str_detect(variable, "_price_per_unit")) q.type <- "numeric"
+    else stop("Variable unknown")
+    cols <- indicators$col.name[str_starts(indicators$col.name, variable)]
+    df <- data[c(admin.output, all_of(cols))]
+    if (q.type=="select_one") return(analyse.select_one(df, admin.output, variable))
+    if (q.type=="select_multiple") return(analyse.select_multiple(df, admin.output, variable))
+    if (q.type %in% c("numeric", "integer")) return(analyse.numeric(df, admin.output, variable))
+    stop("Uncatched error")
+  })
+  return(r %>% reduce(full_join, by=admin.output) %>% rename(admin=admin.output))
 }

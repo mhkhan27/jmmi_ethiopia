@@ -15,7 +15,17 @@ data <- read_excel(paste0(directory.final, assessment.month, "_cleaned_dataset.x
 ##########################################################################################################
 
 cols <- colnames(data)[!(colnames(data) %in% c("adm3_woreda", "partner", "phone")) &
-                         !str_starts(colnames(data), "type_vendor")]
+                         !str_starts(colnames(data), "type_vendor") &
+                         !str_ends(colnames(data), "_standard_unit") &
+                         !str_ends(colnames(data), "_nonstandard_unit") &
+                         !str_ends(colnames(data), "_nonstandard_unit_g") &
+                         !str_ends(colnames(data), "_nonstandard_unit_ml") &
+                         !str_ends(colnames(data), "_price") &
+                         !str_ends(colnames(data), "truck_capacity") &
+                         !str_ends(colnames(data), "water_price_base") &
+                         !str_ends(colnames(data), "water_price_5km") &
+                         !str_ends(colnames(data), "water_price_10km")]
+
 data.woreda <- lapply(cols, function(x){
   
   # get question type (select_one, select_multiple, integer, etc.)
@@ -36,7 +46,7 @@ data.woreda <- lapply(cols, function(x){
         str_starts(x, "food_sold") ~ get.at.least.one(!!sym(x)),
         str_starts(x, "hygiene_sold") ~ get.at.least.one(!!sym(x)),
         TRUE ~ get.mode(!!sym(x))))
-    } else if (q.type %in% c("integer", "decimal") | str_detect(x, "price_per_unit")){
+    } else{
       df <- df %>% summarise(!!x := median(!!sym(x)))
     }
     return(df)
@@ -44,11 +54,14 @@ data.woreda <- lapply(cols, function(x){
   return(NULL)
 })
 data.woreda <- data.woreda[!sapply(data.woreda, is.null)] %>% reduce(full_join, by="adm3_woreda")
-write.xlsx(b, "data.woreda.xlsx")
+write.xlsx(data.woreda, "data.woreda.xlsx")
 
 ##########################################################################################################
 # Step 3: determine list of indicators
 ##########################################################################################################
 
-
-
+analysis.national <- run.analysis(data.woreda, "adm0_national")
+analysis.region <- run.analysis(data.woreda, "adm1_region")
+analysis.zone <- run.analysis(data.woreda, "adm2_zone")
+analysis <- rbind(analysis.national, analysis.region, analysis.zone)
+write.xlsx(analysis, "analysis.xlsx")
