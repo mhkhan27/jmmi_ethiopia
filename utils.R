@@ -82,9 +82,9 @@ calculate_price_per_unit <- function(item, standard_unit, non_standard_unit, uni
     non_standard_unit == "medeb" & item == "vegetables_leafy_darkgreen" ~ price / 0.5,
     non_standard_unit == "piece" & item == "bath_soap" ~ price,
     non_standard_unit == "piece" & item == "vegetables_leafy_darkgreen" ~ price / 0.5,
-    non_standard_unit == "sachet" & item == "bleach" ~ price,
-    non_standard_unit == "bundle_large" & item == "enset" ~ price,
-    non_standard_unit == "cup_glass" & item == "cooking_oil" ~ price / 200 * 1000,
+    non_standard_unit == "sachet" & item == "bleach" ~ price / 2 * 4,  # sachet of 2 grams
+    non_standard_unit == "bundle_large" & item == "enset" ~ price / 10,  # bundle_large = 10 kg
+    non_standard_unit == "cup_glass" & item == "cooking_oil" ~ price / 250 * 1000,
     !is.na(standard_unit) & test ~ -1,
     TRUE ~ NA_real_)
 }
