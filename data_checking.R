@@ -80,7 +80,7 @@ other <- raw.step1[c("uuid", cols)] %>%
   pivot_longer(cols=all_of(cols), names_to="variable", values_to="old.value") %>% 
   filter(!is.na(old.value))
 
-# --> open other data.frame and manually recode/remove the responses in cl.other below
+# --> open 'other' data.frame and manually recode/remove the responses in 'cl.other' below
 cl.other <- rbind(
   get.entry.other.changes(uuid="c85a6190-052c-437b-aa06-7e46488804c0", item="bath_soap", 
                           standard_unit="no", nonstandard_unit="piece", 
@@ -116,7 +116,7 @@ raw.step1 <- apply.changes(raw.step1, cl.other)
 
 # CHECK DESCRIPTION: In the early section about item availability, vendors are first asked about the 
 # general availability of every monitored item in the market (A), and are then asked which of these 
-# items they are currently selling (B). If they say they’re selling a particularitem (in B) that they 
+# items they are currently selling (B). If they say they’re selling a particular item (in B) that they 
 # previously marked “completely unavailable in this marketplace” (in A), this is a clear contradiction 
 # that needs to be corrected.
 
@@ -179,7 +179,7 @@ if (nrow(raw.check) > 0) stop("Prices 0 are detected")
 
 # get list of nonstandard_unit reported in the dataset
 non.standard.units <- get.list.nstd.units()
-# -> check if calculate_price_per_unit needs to be updated to include new units
+# -> check if there are new nonstandard units that need to be added in 'calculate_price_per_unit' function
 
 # convert relevant columns to numeric
 raw.step1 <- to.double(raw.step1, columns=get.numeric.columns())
@@ -197,7 +197,7 @@ raw.check$nonstandard_unit <- apply(raw.check, 1, function(x)
 raw.check$nonstandard_unit_other <- apply(raw.check, 1, function(x) 
   get.value(raw.step1, x["uuid"], paste0(x["item"], "_nonstandard_unit_other")))
 raw.check <- arrange(raw.check, item, nonstandard_unit, nonstandard_unit_other)
-if (nrow(raw.check) > 0) stop("Some nonstandard units were not converted. Edit calculate_price_per_unit function.")
+if (nrow(raw.check) > 0) stop(paste0(nrow(raw.check)," units were not converted. Edit calculate_price_per_unit function if needed."))
 # 3) run with test=F to get correct prices per unit
 raw.step1 <- add.price.per.unit(raw.step1, test=F)
 # 4) test price per unit calculations --> open res and inspect results
