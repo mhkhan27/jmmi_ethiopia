@@ -451,6 +451,7 @@ analysis.boxplot <- function(data, category){
   mins <- plyr::ddply(data, "item", summarise, min = min(price_per_unit, na.rm=T))
   maxs <- plyr::ddply(data, "item", summarise, max = max(price_per_unit, na.rm=T))
   
+  num.items <- length(unique(data$item))
   p <- ggplot(data=data, aes(x=reorder(item, -price_per_unit, median), y=price_per_unit, width=0.3)) +
     stat_summary(fun.data = boxplot_statistics, geom="boxplot", fill = "#D1D3D4") +
     theme_bw() + 
@@ -459,7 +460,7 @@ analysis.boxplot <- function(data, category){
               size=2.5, vjust=1.5) +
     geom_text(data=medians, 
               aes(x=item, y=med, label=get.number.label(item, med)),
-              size=2.5, hjust = -1) +
+              size=2.5, hjust = ifelse(num.items < 5, -.7, -1)) +
     geom_text(data=maxs, 
               aes(x=item, y=max, label=get.number.label(item, max)),
               size=2.5, vjust =-0.5) +
@@ -467,7 +468,7 @@ analysis.boxplot <- function(data, category){
           axis.title.x = element_blank(),
           axis.title.y = element_blank())
   ggsave(paste0(directory.final, assessment.month, "_analysis_boxplot_", category, ".pdf"), 
-         width=2*length(unique(data$item)), height=12, units="cm", device="pdf")
+         width=2*num.items, height=12, units="cm", device="pdf")
 }
 
 

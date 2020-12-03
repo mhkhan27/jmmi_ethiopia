@@ -91,7 +91,10 @@ data <- data.woreda[cols] %>%
   pivot_longer(cols=all_of(cols), names_to="item", values_to="price_per_unit") %>% 
   filter(!is.na(price_per_unit)) %>% left_join(labels, by="item") %>% 
   mutate(item=paste0(label, "\n(", unit, ")")) %>% select(-c("label", "unit")) %>% 
-  mutate(category=ifelse(str_detect(item, "Beef|Goat|Mutton"), "meat_items", "other_items"))
+  mutate(category=case_when(
+    str_detect(item, "Beef|Goat|Mutton") ~ "meat_items",
+    str_detect(item, "Water") ~ "water_items",
+    TRUE ~ "other_items"))
 
 # boxplot with all items
 analysis.boxplot(data, "all_items")

@@ -57,7 +57,7 @@ raw.step2 <- add.price.per.unit(raw.step2)
 write.xlsx(raw.step2, paste0(directory.final, assessment.month, "_dataset_cleaned.xlsx"))
 
 ##########################################################################################################
-# Step 4: save combined cleaning log
+# Step 4: combine cleaning logs and save
 ##########################################################################################################
 
 cl.checking <- read_excel(paste0(directory.checking, "cleaning.log.checking.xlsx"))
