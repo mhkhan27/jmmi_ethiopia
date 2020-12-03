@@ -196,12 +196,6 @@ generate.generic.outliers.boxplot <- function(){
          width = 40, height = 40, units = "cm", device="pdf")
 }
 
-get.value.old <- function(df, uuid, col){
-  col.type <- class(df[[col]])
-  if (col.type=="numeric") return(as.numeric(df[df$uuid==uuid, col]))
-  else return(as.character(df[df$uuid==uuid, col]))
-}
-
 get.value <- function(df, idx.col, idx, col){
   col.type <- class(df[[col]])
   if (col.type=="numeric") res <- as.numeric(df[df[[idx.col]]==idx, col])
@@ -332,7 +326,9 @@ get.cleaning.log <- function(x, y){
   quantity.old <- as.numeric(x[x$variable=="quantity", "old.value"])
   quantity.new <- as.numeric(x[x$variable=="quantity", "new.value"])
   unit.old <- as.character(x[x$variable=="unit", "old.value"])
-  unit.new <- as.character(x[x$variable=="unit", "new.value"])
+  unit.new <- tolower(as.character(x[x$variable=="unit", "new.value"]))
+  unit.new <- ifelse(unit.new=="kg", "kilogram", unit.new)
+  unit.new <- ifelse(unit.new=="liter", "litre", unit.new)
   price.old <- as.numeric(x[x$variable=="price", "old.value"])
   price.new <- as.numeric(x[x$variable=="price", "new.value"])
   cl <- data.frame()
@@ -435,3 +431,43 @@ run.analysis <- function(data, admin.output){
   })
   return(r %>% reduce(full_join, by=admin.output) %>% rename(admin=admin.output))
 }
+
+
+analysis.boxplot <- function(data, category){
+  boxplot_statistics <- function(x) {
+    r <- quantile(x, probs = c(0.00, 0.25, 0.5, 0.75, 1))
+    names(r) <- c("ymin", "lower", "middle", "upper", "ymax")
+    return(r)
+  }
+  
+  get.number.label <- function(item, value){
+    rounding <- ifelse(str_starts(item, "Water"), 2, 0)
+    df <- data.frame(value=value, rounding=rounding)
+    return(apply(df, 1, function(x) 
+      return(str_pad(format(x["value"], digits=x["rounding"]), width=3, side="left"))))
+  }
+  
+  medians <- plyr::ddply(data, "item", summarise, med = median(price_per_unit, na.rm=T))
+  mins <- plyr::ddply(data, "item", summarise, min = min(price_per_unit, na.rm=T))
+  maxs <- plyr::ddply(data, "item", summarise, max = max(price_per_unit, na.rm=T))
+  
+  p <- ggplot(data=data, aes(x=reorder(item, -price_per_unit, median), y=price_per_unit, width=0.3)) +
+    stat_summary(fun.data = boxplot_statistics, geom="boxplot", fill = "#D1D3D4") +
+    theme_bw() + 
+    geom_text(data=mins, 
+              aes(x=item, y=min, label=get.number.label(item, min)),
+              size=2.5, vjust=1.5) +
+    geom_text(data=medians, 
+              aes(x=item, y=med, label=get.number.label(item, med)),
+              size=2.5, hjust = -1) +
+    geom_text(data=maxs, 
+              aes(x=item, y=max, label=get.number.label(item, max)),
+              size=2.5, vjust =-0.5) +
+    theme(axis.text.x = element_text(angle = 0, size = 7, hjust = 0.5 ),
+          axis.title.x = element_blank(),
+          axis.title.y = element_blank())
+  ggsave(paste0("boxplot_", category, ".pdf"), 
+         width=2*length(unique(data$item)), height=12, units="cm", device="pdf")
+}
+
+
