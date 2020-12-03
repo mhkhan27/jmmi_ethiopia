@@ -53,4 +53,4 @@ cleaning.log <- cleaning.log %>% mutate(modified=case_when(
 
 raw.step2 <- apply.changes(raw.step1, cleaning.log)
 raw.step2 <- add.price.per.unit(raw.step2)
-write.xlsx(raw.step2, paste0(directory.final, assessment.month, "_cleaned_dataset.xlsx"))
+write.xlsx(raw.step2, paste0(directory.final, assessment.month, "_dataset_cleaned.xlsx"))

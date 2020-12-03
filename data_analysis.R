@@ -8,7 +8,7 @@ source("./config.R")
 # Step 1: load dataset
 ##########################################################################################################
 
-data <- read_excel(paste0(directory.final, assessment.month, "_cleaned_dataset.xlsx"), guess_max = 20000)
+data <- read_excel(paste0(directory.final, assessment.month, "_dataset_cleaned.xlsx"), guess_max = 20000)
 
 ##########################################################################################################
 # Step 2: aggregate at woreda level <-- basis for the entire analysis
@@ -54,17 +54,32 @@ data.woreda <- lapply(cols, function(x){
   return(NULL)
 })
 data.woreda <- data.woreda[!sapply(data.woreda, is.null)] %>% reduce(full_join, by="adm3_woreda")
-write.xlsx(data.woreda, "data.woreda.xlsx")
+# write.xlsx(data.woreda, paste0(directory.final, assessment.month, "_dataset_aggregated_woreda.xlsx"))
 
 ##########################################################################################################
 # Step 3: generate analysis output for InDesign
 ##########################################################################################################
 
+# run analysis for each admin aggregation
 analysis.national <- run.analysis(data.woreda, "adm0_national")
 analysis.region <- run.analysis(data.woreda, "adm1_region")
 analysis.zone <- run.analysis(data.woreda, "adm2_zone")
-analysis <- rbind(analysis.national, analysis.region, analysis.zone)
-write.xlsx(analysis, "analysis.xlsx")
+
+# combine analysis and add names
+analysis <- rbind(analysis.national, analysis.region, analysis.zone) %>%
+  mutate(admin.level=case_when(
+    str_length(admin)==2 ~ "National",
+    str_length(admin)==4 ~ "Region",
+    str_length(admin)==6 ~ "Zone",
+    str_length(admin)==8 ~ "Woreda",
+    TRUE ~ NA_character_)) %>%
+  left_join(select(tool.choices, name, `label::English`), by=c("admin"="name")) %>% 
+  rename(admin.pcode=admin, admin.name="label::English") %>% 
+  relocate(admin.level, .before="admin.pcode") %>% 
+  relocate(admin.name, .after="admin.pcode")
+
+# save analysis
+write.xlsx(analysis, paste0(directory.final, assessment.month, "_analysis_InDesign.xlsx"))
 
 ##########################################################################################################
 # Step 4: generate boxplot at national level
@@ -83,5 +98,3 @@ analysis.boxplot(data, "all_items")
 
 # one boxplot for each category (meat_items, other_items)
 r <- data %>% group_by(category) %>% group_map(~analysis.boxplot(.x,.y))
-
-

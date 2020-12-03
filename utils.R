@@ -466,7 +466,7 @@ analysis.boxplot <- function(data, category){
     theme(axis.text.x = element_text(angle = 0, size = 7, hjust = 0.5 ),
           axis.title.x = element_blank(),
           axis.title.y = element_blank())
-  ggsave(paste0("boxplot_", category, ".pdf"), 
+  ggsave(paste0(directory.final, assessment.month, "_analysis_boxplot_", category, ".pdf"), 
          width=2*length(unique(data$item)), height=12, units="cm", device="pdf")
 }
 
