@@ -101,7 +101,7 @@ remove.water.responses <- function(uuid){
   cols <- c("truck_capacity", cols)
   cl <- rbind(
     data.frame(uuid=uuid, variable="type_vendor", 
-               new.value=trimws(str_remove(get.value(raw.step1, uuid.nok, "type_vendor"), "water"))),
+               new.value=trimws(str_remove(get.value(raw.step1, "uuid", uuid.nok, "type_vendor"), "water"))),
     data.frame(uuid=uuid, variable="type_vendor/water", new.value="0"),
     do.call(rbind, lapply(cols, function(x) data.frame(uuid=uuid, variable=x, new.value=NA))))
   return(cl)
@@ -121,7 +121,7 @@ remove.food.item <- function(df, uuid, item){
   cols <- colnames(df)[str_starts(colnames(df), item)]
   cl <- rbind(
     data.frame(uuid=uuid, variable="food_sold", 
-               new.value=trimws(str_remove(get.value(df, uuid, "food_sold"), item))),
+               new.value=trimws(str_remove(get.value(df, "uuid", uuid, "food_sold"), item))),
     data.frame(uuid=uuid, variable=paste0("food_sold/", item), new.value="0"),
     do.call(rbind, lapply(cols, function(x) return(data.frame(uuid=uuid, variable=x, new.value=NA)))))
   return(cl)
@@ -272,20 +272,20 @@ create.outliers.cleaning.log <- function(outliers){
     # get reported unit and quantity
     if (item=="water"){
       unit <- "litre (truck capacity)"
-      quantity <- get.value(raw.step1, uuid, "truck_capacity")
+      quantity <- get.value(raw.step1, "uuid", uuid, "truck_capacity")
     } else{
-      if (get.value(raw.step1, uuid, paste0(item, "_standard_unit"))=="yes"){
+      if (get.value(raw.step1, "uuid", uuid, paste0(item, "_standard_unit"))=="yes"){
         unit <- as.character(standard.units[standard.units$item==item, "standard.unit"])
         quantity <- as.numeric(standard.units[standard.units$item==item, "quantity"])
       } else{
-        if (get.value(raw.step1, uuid, paste0(item, "_nonstandard_unit"))=="gram"){
+        if (get.value(raw.step1, "uuid", uuid, paste0(item, "_nonstandard_unit"))=="gram"){
           unit <- "gram"
-          quantity <- get.value(raw.step1, uuid, paste0(item, "_nonstandard_unit_g"))
-        } else if (get.value(raw.step1, uuid, paste0(item, "_nonstandard_unit"))=="millilitre"){
+          quantity <- get.value(raw.step1, "uuid", uuid, paste0(item, "_nonstandard_unit_g"))
+        } else if (get.value(raw.step1, "uuid", uuid, paste0(item, "_nonstandard_unit"))=="millilitre"){
           unit <- "millilitre"
-          quantity <- get.value(raw.step1, uuid, paste0(item, "_nonstandard_unit_ml"))
+          quantity <- get.value(raw.step1, "uuid", uuid, paste0(item, "_nonstandard_unit_ml"))
         } else {
-          unit <- get.value(raw.step1, uuid, paste0(item, "_nonstandard_unit"))
+          unit <- get.value(raw.step1, "uuid", uuid, paste0(item, "_nonstandard_unit"))
           quantity <- 1
         }
       }
@@ -297,7 +297,7 @@ create.outliers.cleaning.log <- function(outliers){
                                               variable="unit", old.value=unit, issue=outlier.type),
                                    data.frame(uuid=uuid, item=item,
                                               variable="price",
-                                              old.value=get.value(raw.step1, uuid, price.variable),
+                                              old.value=get.value(raw.step1, "uuid", uuid, price.variable),
                                               issue=outlier.type))
   }
   cleaning.log.outliers$issue <- ifelse(cleaning.log.outliers$issue=="high",
