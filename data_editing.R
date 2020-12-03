@@ -26,18 +26,19 @@ write.xlsx(responses, paste0(directory.final, assessment.month, "_follow_up_resp
 responses <- read_excel(paste0(directory.final, assessment.month, "_follow_up_responses.xlsx"), col_types="text")
 
 # split responses for outliers and logical checks
-responses.outlier <- filter(responses, check.id=="Outlier")
-responses.logical <- filter(responses, check.id=="Logical") %>% 
+responses.outlier.price <- filter(responses, check.id=="Outlier.price")
+responses.outlier.generic <- filter(responses, check.id=="Outlier.generic") %>% 
   select(uuid, variable, old.value, new.value)
 
 # generate cleaning log for outlier responses
-cleaning.log <- do.call(rbind, responses.outlier %>% 
+cleaning.log.prices <- do.call(rbind, responses.outlier.price %>% 
   group_by(uuid, item) %>% 
-  group_map(~ get.cleaning.log(.x, .y)))
-cleaning.log$old.value <- apply(cleaning.log, 1, function(x) get.value(raw.step1, x["uuid"], x["variable"]))
+  group_map(~get.cleaning.log(.x, .y)))
+cleaning.log.prices$old.value <- apply(cleaning.log.prices, 1, 
+                                function(x) get.value(raw.step1, "uuid", x["uuid"], x["variable"]))
 
 # combine with responses for logical checks and add missing columns
-cleaning.log <- rbind(cleaning.log, responses.logical)
+cleaning.log <- rbind(cleaning.log.prices, responses.outlier.generic)
 cleaning.log <- cleaning.log %>% mutate(modified=case_when(
   old.value==new.value ~ F,
   old.value!=new.value ~ T,
@@ -50,6 +51,6 @@ cleaning.log <- cleaning.log %>% mutate(modified=case_when(
 # Step 3: apply changes and re-calculate price_per_unit
 ##########################################################################################################
 
-raw.step3 <- apply.changes(raw.step1, cleaning.log)
-raw.step3 <- add.price.per.unit(raw.step3)
-write.xlsx(raw.step3, paste0(directory.final, assessment.month, "_cleaned_dataset.xlsx"))
+raw.step2 <- apply.changes(raw.step1, cleaning.log)
+raw.step2 <- add.price.per.unit(raw.step2)
+write.xlsx(raw.step2, paste0(directory.final, assessment.month, "_cleaned_dataset.xlsx"))
