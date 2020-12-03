@@ -28,7 +28,7 @@ responses <- read_excel(paste0(directory.final, assessment.month, "_follow_up_re
 # split responses for outliers and logical checks
 responses.outlier.price <- filter(responses, check.id=="Outlier.price")
 responses.outlier.generic <- filter(responses, check.id=="Outlier.generic") %>% 
-  select(uuid, variable, old.value, new.value)
+  select(uuid, variable, old.value, new.value, check.id)
 
 # generate cleaning log for outlier responses
 cleaning.log.prices <- do.call(rbind, responses.outlier.price %>% 
@@ -36,21 +36,31 @@ cleaning.log.prices <- do.call(rbind, responses.outlier.price %>%
   group_map(~get.cleaning.log(.x, .y)))
 cleaning.log.prices$old.value <- apply(cleaning.log.prices, 1, 
                                 function(x) get.value(raw.step1, "uuid", x["uuid"], x["variable"]))
+cleaning.log.prices$check.id <- "Outlier.price"
 
 # combine with responses for logical checks and add missing columns
-cleaning.log <- rbind(cleaning.log.prices, responses.outlier.generic)
-cleaning.log <- cleaning.log %>% mutate(modified=case_when(
+cl.editing <- rbind(cleaning.log.prices, responses.outlier.generic)
+cl.editing <- cl.editing %>% mutate(modified=case_when(
   old.value==new.value ~ F,
   old.value!=new.value ~ T,
   is.na(old.value) & !is.na(new.value) ~ T,
   !is.na(old.value) & is.na(new.value) ~ T,
   TRUE ~ F)) %>% 
-  filter(modified) %>% select(uuid, variable, old.value, new.value)
+  filter(modified) %>% select(uuid, variable, old.value, new.value, check.id)
 
 ##########################################################################################################
-# Step 3: apply changes and re-calculate price_per_unit
+# Step 3: apply changes, re-calculate price_per_unit and save dataset_cleaned
 ##########################################################################################################
 
-raw.step2 <- apply.changes(raw.step1, cleaning.log)
+raw.step2 <- apply.changes(raw.step1, cl.editing)
 raw.step2 <- add.price.per.unit(raw.step2)
 write.xlsx(raw.step2, paste0(directory.final, assessment.month, "_dataset_cleaned.xlsx"))
+
+##########################################################################################################
+# Step 4: save combined cleaning log
+##########################################################################################################
+
+cl.checking <- read_excel(paste0(directory.checking, "cleaning.log.checking.xlsx"))
+cl.combined <- rbind(cl.checking, cl.editing)
+write.xlsx(cl.combined, paste0(directory.final, assessment.month, "_cleaning_log.xlsx"))
+
