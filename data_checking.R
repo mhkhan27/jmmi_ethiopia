@@ -99,7 +99,7 @@ cl.other <- rbind(
                           standard_unit="no", nonstandard_unit="gram", 
                           nonstandard_unit_g=200, nonstandard_unit_ml=NA, nonstandard_unit_other=NA))
 # add old.valus
-cl.other$old.value <- apply(cl.other, 1, function(x) get.value(raw.step1, x["uuid"], x["variable"]))
+cl.other$old.value <- apply(cl.other, 1, function(x) get.value(raw.step1, "uuid", x["uuid"], x["variable"]))
 cl.other <- select(cl.other, uuid, variable, old.value, new.value)
 # keep only required changes
 cl.other <- cl.other %>% 
@@ -153,7 +153,7 @@ uuid.nok <- filter(raw.step1, as.numeric(truck_capacity)==0 & as.numeric(water_p
 # generate cleaning log with the required changes
 cl.logical.check2 <- do.call(rbind, lapply(uuid.nok, function(x) remove.water.responses(x)))
 cl.logical.check2$old.value <- apply(cl.logical.check2, 1, 
-                                     function(x) get.value(raw.step1, x["uuid"], x["variable"]))
+                                     function(x) get.value(raw.step1, "uuid", x["uuid"], x["variable"]))
 cl.logical.check2 <- select(cl.logical.check2, uuid, variable, old.value, new.value)
 cl.logical.check2 <- cl.logical.check2 %>% 
   filter((is.na(old.value) & !is.na(new.value)) | (!is.na(old.value) & is.na(new.value)) |
@@ -193,9 +193,9 @@ raw.check <- raw.step1[c("uuid", all_of(cols.outliers1))] %>%
   filter(!is.na(value) & as.numeric(value)==-1)
 raw.check$item <- apply(raw.check, 1, function(x) str_split(x["variable"], "_")[[1]][1])
 raw.check$nonstandard_unit <- apply(raw.check, 1, function(x) 
-  get.value(raw.step1, x["uuid"], paste0(x["item"], "_nonstandard_unit")))
+  get.value(raw.step1, "uuid", x["uuid"], paste0(x["item"], "_nonstandard_unit")))
 raw.check$nonstandard_unit_other <- apply(raw.check, 1, function(x) 
-  get.value(raw.step1, x["uuid"], paste0(x["item"], "_nonstandard_unit_other")))
+  get.value(raw.step1, "uuid", x["uuid"], paste0(x["item"], "_nonstandard_unit_other")))
 raw.check <- arrange(raw.check, item, nonstandard_unit, nonstandard_unit_other)
 if (nrow(raw.check) > 0) stop(paste0(nrow(raw.check)," units were not converted. Edit calculate_price_per_unit function if needed."))
 # 3) run with test=F to get correct prices per unit
@@ -269,7 +269,7 @@ cleaning.log.cols <- c("uuid", "date", "partner", "enumerator_id",
 cleaning.log <- select(cleaning.log, all_of(cleaning.log.cols))
 
 ##########################################################################################################
-# Step 12: save dataset_checked and changes made, split follow up requests and send emails to partners
+# Step 12: save dataset_checked and changes made, and split follow up requests
 ##########################################################################################################
 
 # save dataset_checked

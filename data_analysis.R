@@ -82,7 +82,7 @@ analysis <- rbind(analysis.national, analysis.region, analysis.zone) %>%
 write.xlsx(analysis, paste0(directory.final, assessment.month, "_analysis_InDesign.xlsx"))
 
 ##########################################################################################################
-# Step 4: generate boxplot at national level
+# Step 4: generate boxplots at national level
 ##########################################################################################################
 
 labels <- read_excel("resources/item_labels.xlsx")
@@ -101,3 +101,4 @@ analysis.boxplot(data, "all_items")
 
 # one boxplot for each category (meat_items, other_items)
 r <- data %>% group_by(category) %>% group_map(~analysis.boxplot(.x,.y))
+

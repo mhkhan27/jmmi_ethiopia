@@ -1,7 +1,99 @@
+##########################################################################################################
+# GENERIC FUNCTIONS
+##########################################################################################################
+# get list of all items in the tool rather than water
 get.all.items <- function(){
   return((tool.choices %>% filter(list_name=="all_items", name!="water"))$name)
 }
+# get list of all items in the tool with their standard units
+get.list.std.units <- function(){
+  standard.units <- do.call(rbind, lapply(all.items, function(x) {
+    variable <- paste0(x, "_standard_unit")
+    label <- tool.survey[!is.na(tool.survey$name) & tool.survey$name==variable, "label::English"]
+    unit <- str_remove(str_split(as.character(label), "in units of ")[[1]][2], "\\?")
+    return(data.frame(item=x, standard.unit=str_sub(unit, 3, str_length(unit)), quantity=1))}))
+  return(standard.units)
+}
+# get list of nonstandard units in the dataset
+get.list.nstd.units <- function(){
+  cols <- colnames(raw)[str_ends(colnames(raw), "_nonstandard_unit")]
+  non.standard.units <- raw[c("uuid", cols)] %>% 
+    pivot_longer(cols=all_of(cols), names_to="variable", values_to="old.value") %>% 
+    filter(!is.na(old.value)) %>% 
+    left_join(select(raw, uuid, adm1_region), by="uuid")
+  non.standard.units$adm1_region.name <- apply(
+    non.standard.units, 1, 
+    function(x) as.character(tool.choices[tool.choices$name==as.character(x["adm1_region"]), "label::English"]))
+  return(non.standard.units)
+}
+# get value from generic data.frame
+get.value <- function(df, idx.col, idx, col){
+  col.type <- class(df[[col]])
+  if (col.type=="numeric") res <- as.numeric(df[df[[idx.col]]==idx, col])
+  else res <- as.character(df[df[[idx.col]]==idx, col])
+  if (length(res)==1) return(res)
+  else stop("Multiple matches")
+}
+# convert the given columns of a data.frame to double
+to.double <- function(df, columns){
+  for (col in columns) df[[col]] <- as.double(df[[col]])
+  return(df)
+}
+# get list of numeric columns
+get.numeric.columns <- function(){
+  cols <- c(as.character(lapply(all.items, function(x) paste0(x, "_nonstandard_unit_g"))),
+            as.character(lapply(all.items, function(x) paste0(x, "_nonstandard_unit_ml"))),
+            as.character(lapply(all.items, function(x) paste0(x, "_price"))),
+            as.character(lapply(all.items, function(x) paste0(x, "_stock_days"))),
+            as.character(lapply(all.items, function(x) paste0(x, "_resupply_days"))),
+            "truck_capacity", 
+            "water_price_base", "water_price_5km", "water_price_10km")
+  return(cols)
+}
+# apply cleaning log changes to a data.frame
+apply.changes <- function(df, cleaning.log){
+  for (r in 1:nrow(cleaning.log)){
+    uuid <- as.character(cleaning.log[r, "uuid"])
+    variable <- as.character(cleaning.log[r, "variable"])
+    if (class(df[[variable]])=="numeric") new.value <- as.numeric(cleaning.log[r, "new.value"])
+    else new.value <- as.character(cleaning.log[r, "new.value"])
+    df[df$uuid==uuid, variable] <- new.value
+  }
+  return(df)
+}
+# calculate mode
+get.mode <- function(x){
+  uniqx <- unique(x)
+  uniqx[which.max(tabulate(match(x, uniqx)))]
+}
 
+##########################################################################################################
+# FUNCTIONS FOR DATA CHECKING
+##########################################################################################################
+# function used in logical check 1 to return the list of items unavailable for a given survey
+check.availability <- function(r){
+  if (!is.na(r["food_sold"]) & r["food_sold"]!="none"){
+    food.sold <- str_split(r["food_sold"], " ")[[1]]
+    food.sold[food.sold=="goat_meat"] <- "goatmeat"
+    food.sold[food.sold=="vegetables_leafy_darkgreen"] <- "vegetables"
+    food.sold[food.sold=="cooking_oil"] <- "cookingoil"
+    cols.food <- as.character(lapply(food.sold, function(x) paste0("availability_food_", x)))
+  } else cols.food <- c()
+  if (!is.na(r["hygiene_sold"]) & r["hygiene_sold"]!="none"){
+    hygiene.sold <- str_split(r["hygiene_sold"], " ")[[1]]
+    hygiene.sold[hygiene.sold=="bath_soap"] <- "bathsoap"
+    cols.hygiene <- as.character(lapply(hygiene.sold, function(x) paste0("availability_hygiene_", x)))
+  } else cols.hygiene <- c()
+  cols <- c(cols.food, cols.hygiene)
+  if (length(cols) > 0){
+    df <- pivot_longer(data.frame(as.list(r[c("uuid", all_of(cols))])), 
+                       cols=all_of(cols), names_to="variable", values_to="old.value") %>% 
+      filter(old.value=="unavailable")
+    df$item <- as.character(lapply(df$variable, function(x) str_split(x, "_")[[1]][3]))
+    return(df)
+  } else return(data.frame())
+}
+# generates a cleaning log to remove the water responses (used in logical check 2)
 remove.water.responses <- function(uuid){
   cols <- colnames(raw.step1)[str_detect(colnames(raw.step1), "water") & 
                                 !(colnames(raw.step1) %in% c("type_vendor/water", 
@@ -14,18 +106,7 @@ remove.water.responses <- function(uuid){
     do.call(rbind, lapply(cols, function(x) data.frame(uuid=uuid, variable=x, new.value=NA))))
   return(cl)
 }
-
-get.numeric.columns <- function(){
-  cols <- c(as.character(lapply(all.items, function(x) paste0(x, "_nonstandard_unit_g"))),
-            as.character(lapply(all.items, function(x) paste0(x, "_nonstandard_unit_ml"))),
-            as.character(lapply(all.items, function(x) paste0(x, "_price"))),
-            as.character(lapply(all.items, function(x) paste0(x, "_stock_days"))),
-            as.character(lapply(all.items, function(x) paste0(x, "_resupply_days"))),
-            "truck_capacity", 
-            "water_price_base", "water_price_5km", "water_price_10km")
-  return(cols)
-}
-
+# generate a cleaning log to recode the other responses
 get.entry.other.changes <- function(uuid, item, standard_unit, nonstandard_unit, 
                                     nonstandard_unit_g, nonstandard_unit_ml, nonstandard_unit_other){
   cl <- rbind(data.frame(uuid=uuid, variable=paste0(item, "_standard_unit"), new.value=standard_unit),
@@ -35,7 +116,7 @@ get.entry.other.changes <- function(uuid, item, standard_unit, nonstandard_unit,
               data.frame(uuid=uuid, variable=paste0(item, "_nonstandard_unit_other"), new.value=nonstandard_unit_other))
   return(cl)
 }
-
+# generate a cleaning log to remove the other responses for food items
 remove.food.item <- function(df, uuid, item){
   cols <- colnames(df)[str_starts(colnames(df), item)]
   cl <- rbind(
@@ -45,33 +126,44 @@ remove.food.item <- function(df, uuid, item){
     do.call(rbind, lapply(cols, function(x) return(data.frame(uuid=uuid, variable=x, new.value=NA)))))
   return(cl)
 }
-
-get.list.std.units <- function(){
-  standard.units <- do.call(rbind, lapply(all.items, function(x) {
-    variable <- paste0(x, "_standard_unit")
-    label <- tool.survey[!is.na(tool.survey$name) & tool.survey$name==variable, "label::English"]
-    unit <- str_remove(str_split(as.character(label), "in units of ")[[1]][2], "\\?")
-    return(data.frame(item=x, standard.unit=str_sub(unit, 3, str_length(unit)), quantity=1))}))
-  return(standard.units)
+# save the follow-up requests for a give partner
+save.follow.up.requests <- function(cl, partner){
+  # save follow-up requests
+  wb <- createWorkbook()
+  addWorksheet(wb, "Follow-up")
+  writeData(wb = wb, x = cl, sheet = "Follow-up", startRow = 1)
+  col.id <- which(colnames(cl)=="issue")
+  addStyle(wb, "Follow-up", style = createStyle(wrapText=T), rows=1:(dim(cl)[1]+1), cols=col.id)
+  setColWidths(wb, "Follow-up", cols=col.id, widths=35)
+  setColWidths(wb, "Follow-up", cols=c(2, 4, 5, 6, 7, 8, 12, 13), widths=13)
+  setColWidths(wb, "Follow-up", cols=c(10, 11, 14), widths=22)
+  col.style <- createStyle(textDecoration="bold", fgFill="#CECECE", halign="center",
+                           border="TopBottomLeftRight", borderColour="#000000")
+  addStyle(wb, "Follow-up", style = col.style, rows = 1, cols=1:dim(cl)[2])
+  col.id <- which(colnames(cl)=="old.value")
+  random.color <- ""
+  for (r in 2:dim(cl)[1]){
+    if(as.character(cl[r, "check.id"])=="Outlier.price" &
+       as.character(cl[r, "uuid"])==as.character(cl[r-1, "uuid"]) &
+       !is.na(as.character(cl[r, "item"])) & !is.na(as.character(cl[r - 1, "item"])) &
+       as.character(cl[r, "item"])==as.character(cl[r-1, "item"])){
+      if (random.color == "") random.color <- randomColor(1, luminosity = "light")
+      style <- createStyle(fgFill=random.color)
+      style.input <- createStyle(fgFill=random.color,
+                                 border="TopBottomLeftRight", borderColour="#000000")
+      addStyle(wb, "Follow-up", style=style, rows=r:(r+1), cols=col.id)
+      addStyle(wb, "Follow-up", style=style.input, rows=r:(r+1), cols=col.id+1)
+      addStyle(wb, "Follow-up", style=style.input, rows=r:(r+1), cols=col.id+2)
+    } else random.color=""
+  }
+  filename <- paste0(directory.requests, assessment.month, "_", partner, "_follow_up_requests.xlsx")
+  saveWorkbook(wb, filename, overwrite = TRUE)
 }
 
-get.list.nstd.units <- function(){
-  cols <- colnames(raw)[str_ends(colnames(raw), "_nonstandard_unit")]
-  non.standard.units <- raw[c("uuid", cols)] %>% 
-    pivot_longer(cols=all_of(cols), names_to="variable", values_to="old.value") %>% 
-    filter(!is.na(old.value)) %>% 
-    left_join(select(raw, uuid, adm1_region), by="uuid")
-  non.standard.units$adm1_region.name <- apply(
-    non.standard.units, 1, 
-    function(x) as.character(tool.choices[tool.choices$name==as.character(x["adm1_region"]), "label::English"]))
-  return(non.standard.units)
-}
-
-to.double <- function(df, columns){
-  for (col in columns) df[[col]] <- as.double(df[[col]])
-  return(df)
-}
-
+##########################################################################################################
+# FUNCTIONS TO CALCULATE AND TEST THE PRICE PER UNIT
+##########################################################################################################
+# convert price to price_per_unit
 calculate_price_per_unit <- function(item, standard_unit, non_standard_unit, unit_g, unit_ml, price, test=F){
   case_when(
     standard_unit == "yes" ~ price,
@@ -88,7 +180,7 @@ calculate_price_per_unit <- function(item, standard_unit, non_standard_unit, uni
     !is.na(standard_unit) & test ~ -1,
     TRUE ~ NA_real_)
 }
-
+# function to calculate price_per_unit for all items in the tool
 add.price.per.unit <- function(df, test=F){
   for (item in all.items){
     df[[paste0(item, "_price_per_unit")]] <- 
@@ -105,7 +197,66 @@ add.price.per.unit <- function(df, test=F){
   df$water_price_per_unit_10km <- df$water_price_10km/df$truck_capacity
   return(df)
 }
+# generate a data.frame with the columns used to calculate the price_per_unit of a given item (to be inspected)
+test.price.per.unit <- function(df, item){
+  if (item=="water"){
+    df <- df %>% 
+      select("truck_capacity", "water_price_base", "water_price_5km", "water_price_10km",
+             "water_price_per_unit", "water_price_per_unit_5km", "water_price_per_unit_10km") %>% 
+      filter(!is.na(truck_capacity))
+  } else{
+    df <- df %>% 
+      select(paste0(item, "_standard_unit"), 
+             paste0(item, "_nonstandard_unit"),
+             paste0(item, "_nonstandard_unit_g"),
+             paste0(item, "_nonstandard_unit_ml"),
+             paste0(item, "_nonstandard_unit_other"),
+             paste0(item, "_price"),
+             paste0(item, "_price_per_unit")) %>% 
+      filter(!is.na(!!sym(paste0(item, "_standard_unit"))))
+  }
+  return(df)
+}
 
+##########################################################################################################
+# FUNCTIONS FOR OUTLIERS DETECTION
+##########################################################################################################
+# function to detect outliers
+detect.outliers <- function(df, method="sd", n.sd=3){
+  res <- data.frame()
+  for (col in colnames(df)[colnames(df)!="uuid"]){
+    df.temp <- data.frame(uuid=df$uuid, value=as.numeric(df[[col]])) %>% filter(!is.na(value))
+    if (method=="sd-linear"){
+      df.temp <- df.temp %>%
+        mutate(is.outlier.high=value > mean(value, na.rm=T) + n.sd*sd(value, na.rm=T),
+               is.outlier.low=value < mean(value, na.rm=T) - n.sd*sd(value, na.rm=T))
+    } else if (method=="sd-log"){
+      df.temp <- df.temp %>%
+        mutate(col.log=log(value),
+               is.outlier.high=col.log > mean(col.log, na.rm=T) + n.sd*sd(col.log, na.rm=T),
+               is.outlier.low=col.log < mean(col.log, na.rm=T) - n.sd*sd(col.log, na.rm=T))
+    } else if (method=="iqr-linear") {
+      df.temp <- df.temp %>%
+        mutate(is.outlier.high=value > quantile(value, 0.75) + 1.5*IQR(value),
+               is.outlier.low=value < quantile(value, 0.25) - 1.5*IQR(value))
+    } else if (method=="iqr-log") {
+      df.temp <- df.temp %>%
+        mutate(col.log=log(value),
+               is.outlier.high=col.log > quantile(col.log, 0.75) + 1.5*IQR(col.log),
+               is.outlier.low=col.log < quantile(col.log, 0.25) - 1.5*IQR(col.log))
+    } else stop("Method unknown")
+    df.temp <- df.temp %>% 
+      pivot_longer(c("is.outlier.high", "is.outlier.low"), 
+                   names_to="outlier.type", values_to="is.outlier") %>% 
+      filter(is.outlier) %>% 
+      mutate(variable=col, old.value=value,
+             outlier.type=ifelse(outlier.type=="is.outlier.high", "high", "low")) %>% 
+      select(uuid, variable, old.value, outlier.type)
+    res <- rbind(res, df.temp)
+  }
+  return(res)
+}
+# generate a cleaning log based on the detected outliers
 create.outliers.cleaning.log <- function(outliers){
   cleaning.log.outliers <- data.frame()
   for (r in 1:nrow(outliers)){
@@ -155,7 +306,7 @@ create.outliers.cleaning.log <- function(outliers){
   cleaning.log.outliers$check.id <- "Outlier.price"
   return(cleaning.log.outliers)
 }
-
+# generate a boxplot for all prices highligthing the outliers
 generate.price.outliers.boxplot <- function(){
   df <- raw.step1[, c("uuid", "adm1_region", "adm2_zone", "adm3_woreda", all_of(cols.outliers1))] %>% 
     pivot_longer(cols=all_of(cols.outliers1), names_to="variable", values_to="value") %>% 
@@ -176,7 +327,7 @@ generate.price.outliers.boxplot <- function(){
   ggsave(paste0(directory.checking, assessment.month, "_outlier_analysis_prices.pdf"), g, 
          width = 40, height = 40, units = "cm", device="pdf")
 }
-
+# generate a boxplot for all generic numeric variables highligthing the outliers
 generate.generic.outliers.boxplot <- function(){
   df <- raw.step1[, c("uuid", "adm1_region", "adm2_zone", "adm3_woreda", all_of(cols.outliers.gen))] %>% 
     pivot_longer(cols=all_of(cols.outliers.gen), names_to="variable", values_to="value") %>% 
@@ -196,116 +347,9 @@ generate.generic.outliers.boxplot <- function(){
          width = 40, height = 40, units = "cm", device="pdf")
 }
 
-get.value <- function(df, idx.col, idx, col){
-  col.type <- class(df[[col]])
-  if (col.type=="numeric") res <- as.numeric(df[df[[idx.col]]==idx, col])
-  else res <- as.character(df[df[[idx.col]]==idx, col])
-  if (length(res)==1) return(res)
-  else stop("Multiple matches")
-}
-
-apply.changes <- function(df, cleaning.log){
-  for (r in 1:nrow(cleaning.log)){
-    uuid <- as.character(cleaning.log[r, "uuid"])
-    variable <- as.character(cleaning.log[r, "variable"])
-    if (class(df[[variable]])=="numeric") new.value <- as.numeric(cleaning.log[r, "new.value"])
-    else new.value <- as.character(cleaning.log[r, "new.value"])
-    df[df$uuid==uuid, variable] <- new.value
-  }
-  return(df)
-}
-
-detect.outliers <- function(df, method="sd", n.sd=3){
-  res <- data.frame()
-  for (col in colnames(df)[colnames(df)!="uuid"]){
-    df.temp <- data.frame(uuid=df$uuid, value=as.numeric(df[[col]])) %>% filter(!is.na(value))
-    if (method=="sd-linear"){
-      df.temp <- df.temp %>%
-        mutate(is.outlier.high=value > mean(value, na.rm=T) + n.sd*sd(value, na.rm=T),
-               is.outlier.low=value < mean(value, na.rm=T) - n.sd*sd(value, na.rm=T))
-    } else if (method=="sd-log"){
-      df.temp <- df.temp %>%
-        mutate(col.log=log(value),
-               is.outlier.high=col.log > mean(col.log, na.rm=T) + n.sd*sd(col.log, na.rm=T),
-               is.outlier.low=col.log < mean(col.log, na.rm=T) - n.sd*sd(col.log, na.rm=T))
-    } else if (method=="iqr-linear") {
-      df.temp <- df.temp %>%
-        mutate(is.outlier.high=value > quantile(value, 0.75) + 1.5*IQR(value),
-               is.outlier.low=value < quantile(value, 0.25) - 1.5*IQR(value))
-    } else if (method=="iqr-log") {
-      df.temp <- df.temp %>%
-        mutate(col.log=log(value),
-               is.outlier.high=col.log > quantile(col.log, 0.75) + 1.5*IQR(col.log),
-               is.outlier.low=col.log < quantile(col.log, 0.25) - 1.5*IQR(col.log))
-    } else stop("Method unknown")
-    df.temp <- df.temp %>% 
-      pivot_longer(c("is.outlier.high", "is.outlier.low"), 
-                   names_to="outlier.type", values_to="is.outlier") %>% 
-      filter(is.outlier) %>% 
-      mutate(variable=col, old.value=value,
-             outlier.type=ifelse(outlier.type=="is.outlier.high", "high", "low")) %>% 
-      select(uuid, variable, old.value, outlier.type)
-    res <- rbind(res, df.temp)
-  }
-  return(res)
-}
-
-check.availability <- function(r){
-  if (!is.na(r["food_sold"]) & r["food_sold"]!="none"){
-    food.sold <- str_split(r["food_sold"], " ")[[1]]
-    food.sold[food.sold=="goat_meat"] <- "goatmeat"
-    food.sold[food.sold=="vegetables_leafy_darkgreen"] <- "vegetables"
-    food.sold[food.sold=="cooking_oil"] <- "cookingoil"
-    cols.food <- as.character(lapply(food.sold, function(x) paste0("availability_food_", x)))
-  } else cols.food <- c()
-  if (!is.na(r["hygiene_sold"]) & r["hygiene_sold"]!="none"){
-    hygiene.sold <- str_split(r["hygiene_sold"], " ")[[1]]
-    hygiene.sold[hygiene.sold=="bath_soap"] <- "bathsoap"
-    cols.hygiene <- as.character(lapply(hygiene.sold, function(x) paste0("availability_hygiene_", x)))
-  } else cols.hygiene <- c()
-  cols <- c(cols.food, cols.hygiene)
-  if (length(cols) > 0){
-    df <- pivot_longer(data.frame(as.list(r[c("uuid", all_of(cols))])), 
-                       cols=all_of(cols), names_to="variable", values_to="old.value") %>% 
-      filter(old.value=="unavailable")
-    df$item <- as.character(lapply(df$variable, function(x) str_split(x, "_")[[1]][3]))
-    return(df)
-  } else return(data.frame())
-}
-
-save.follow.up.requests <- function(cl, partner){
-  # save follow-up requests
-  wb <- createWorkbook()
-  addWorksheet(wb, "Follow-up")
-  writeData(wb = wb, x = cl, sheet = "Follow-up", startRow = 1)
-  col.id <- which(colnames(cl)=="issue")
-  addStyle(wb, "Follow-up", style = createStyle(wrapText=T), rows=1:(dim(cl)[1]+1), cols=col.id)
-  setColWidths(wb, "Follow-up", cols=col.id, widths=35)
-  setColWidths(wb, "Follow-up", cols=c(2, 4, 5, 6, 7, 8, 12, 13), widths=13)
-  setColWidths(wb, "Follow-up", cols=c(10, 11, 14), widths=22)
-  col.style <- createStyle(textDecoration="bold", fgFill="#CECECE", halign="center",
-                           border="TopBottomLeftRight", borderColour="#000000")
-  addStyle(wb, "Follow-up", style = col.style, rows = 1, cols=1:dim(cl)[2])
-  col.id <- which(colnames(cl)=="old.value")
-  random.color <- ""
-  for (r in 2:dim(cl)[1]){
-    if(as.character(cl[r, "check.id"])=="Outlier.price" &
-       as.character(cl[r, "uuid"])==as.character(cl[r-1, "uuid"]) &
-       !is.na(as.character(cl[r, "item"])) & !is.na(as.character(cl[r - 1, "item"])) &
-       as.character(cl[r, "item"])==as.character(cl[r-1, "item"])){
-      if (random.color == "") random.color <- randomColor(1, luminosity = "light")
-      style <- createStyle(fgFill=random.color)
-      style.input <- createStyle(fgFill=random.color,
-                                 border="TopBottomLeftRight", borderColour="#000000")
-      addStyle(wb, "Follow-up", style=style, rows=r:(r+1), cols=col.id)
-      addStyle(wb, "Follow-up", style=style.input, rows=r:(r+1), cols=col.id+1)
-      addStyle(wb, "Follow-up", style=style.input, rows=r:(r+1), cols=col.id+2)
-    } else random.color=""
-  }
-  filename <- paste0(directory.requests, assessment.month, "_", partner, "_follow_up_requests.xlsx")
-  saveWorkbook(wb, filename, overwrite = TRUE)
-}
-
+##########################################################################################################
+# FUNCTIONS FOR DATA EDITING
+##########################################################################################################
 get.entry.log <- function(uuid, item, std.unit, nstd.unit, nstd.unit.g, nstd.unit.ml, price){
   return(rbind(data.frame(uuid=uuid, variable=paste0(item, "_standard_unit"), new.value=std.unit),
                data.frame(uuid=uuid, variable=paste0(item, "_nonstandard_unit"), new.value=nstd.unit),
@@ -314,12 +358,10 @@ get.entry.log <- function(uuid, item, std.unit, nstd.unit, nstd.unit.g, nstd.uni
                data.frame(uuid=uuid, variable=paste0(item, "_nonstandard_unit_other"), new.value=NA),
                data.frame(uuid=uuid, variable=paste0(item, "_price"), new.value=price)))
 }
-
 get.entry.log.water <- function(uuid, quantity, price){
   return(rbind(data.frame(uuid=uuid, variable="truck_capacity", new.value=quantity),
                data.frame(uuid=uuid, variable="water_price_base", new.value=price)))
 }
-
 get.cleaning.log <- function(x, y){
   uuid <- as.character(y$uuid)
   item <- as.character(y$item)
@@ -348,40 +390,19 @@ get.cleaning.log <- function(x, y){
   return(cl)
 }
 
-get.mode <- function(x){
-  uniqx <- unique(x)
-  uniqx[which.max(tabulate(match(x, uniqx)))]
-}
-
+##########################################################################################################
+# FUNCTIONS FOR THE ANALYSIS
+##########################################################################################################
+# function to aggregated availability variables at woreda level
 get.availability <- function(x){
   if ("fully_available" %in% x) return("available")
   if ("limited" %in% x) return("limited")
   if ("unavailable" %in% x) return("unavailable")
   return("no data")
 }
-
+# function to aggregate 0/1 variables at woreda level
 get.at.least.one <- function(x) if ("1" %in% x) return("1") else return("0")
-
-test.price.per.unit <- function(df, item){
-  if (item=="water"){
-    df <- df %>% 
-      select("truck_capacity", "water_price_base", "water_price_5km", "water_price_10km",
-             "water_price_per_unit", "water_price_per_unit_5km", "water_price_per_unit_10km") %>% 
-      filter(!is.na(truck_capacity))
-  } else{
-    df <- df %>% 
-      select(paste0(item, "_standard_unit"), 
-             paste0(item, "_nonstandard_unit"),
-             paste0(item, "_nonstandard_unit_g"),
-             paste0(item, "_nonstandard_unit_ml"),
-             paste0(item, "_nonstandard_unit_other"),
-             paste0(item, "_price"),
-             paste0(item, "_price_per_unit")) %>% 
-      filter(!is.na(!!sym(paste0(item, "_standard_unit"))))
-  }
-  return(df)
-}
-
+# function to analyse select_one variables
 analyse.select_one <- function(df, admin.col, variable){
   d <- df %>% 
     filter(!is.na(!!sym(variable))) %>% 
@@ -394,6 +415,7 @@ analyse.select_one <- function(df, admin.col, variable){
     mutate_if(is.numeric, ~replace_na(., 0))
   return(d)
 }
+# function to analyse select_multiple variables
 analyse.select_multiple <- function(df, admin.col, variable){
   cols <- colnames(df)[str_starts(colnames(df), variable)]
   d <- df %>% 
@@ -405,6 +427,7 @@ analyse.select_multiple <- function(df, admin.col, variable){
   colnames(d) <- str_replace(colnames(d), "/", ".")
   return(d)
 }
+# function to analyse numeric variables
 analyse.numeric <- function(df, admin.col, variable){
   d <- df %>% 
     filter(!is.na(!!sym(variable))) %>% 
@@ -412,6 +435,7 @@ analyse.numeric <- function(df, admin.col, variable){
     summarise(!!variable := median(!!sym(variable)))
   return(d)
 }
+# function to run the analysis on all indicators
 run.analysis <- function(data, admin.output){
   indicators <- data.frame(col.name=colnames(data)) %>% 
     filter(!(col.name %in% c("adm1_region", "adm2_zone", "adm3_woreda")))
@@ -431,15 +455,13 @@ run.analysis <- function(data, admin.output){
   })
   return(r %>% reduce(full_join, by=admin.output) %>% rename(admin=admin.output))
 }
-
-
+# function to generate boxplot
 analysis.boxplot <- function(data, category){
   boxplot_statistics <- function(x) {
     r <- quantile(x, probs = c(0.00, 0.25, 0.5, 0.75, 1))
     names(r) <- c("ymin", "lower", "middle", "upper", "ymax")
     return(r)
   }
-  
   get.number.label <- function(item, value){
     rounding <- ifelse(str_starts(item, "Water"), 2, 0)
     df <- data.frame(value=value, rounding=rounding)
@@ -470,5 +492,3 @@ analysis.boxplot <- function(data, category){
   ggsave(paste0(directory.final, assessment.month, "_analysis_boxplot_", category, ".pdf"), 
          width=2*num.items, height=12, units="cm", device="pdf")
 }
-
-
