@@ -9,7 +9,7 @@ source("./config.R")
 ##########################################################################################################
 
 # load dataset_checked
-raw.step1 <- read_excel(paste0(directory.checking, "dataset_checked.xlsx"), col_types = "text")
+raw.step1 <- read_excel(paste0(directory.checking, assessment.month, "_dataset_checked.xlsx"), col_types="text")
 raw.step1 <- to.double(raw.step1, columns=get.numeric.columns())
 
 # load and combine responses
@@ -72,9 +72,16 @@ write.xlsx(raw.step2, paste0(directory.final, assessment.month, "_dataset_cleane
 ##########################################################################################################
 
 # 1) read cleaning log from checking script
-cl.checking <- read_excel(paste0(directory.checking, "cleaning.log.checking.xlsx"))
+cl.checking <- read_excel(paste0(directory.checking, assessment.month, "_cleaning_log_checking.xlsx"))
 # 2) combine cleaning logs from checking and editing
 cl.combined <- rbind(cl.checking, cl.editing)
 # 3) save combined cleaning log
 write.xlsx(cl.combined, paste0(directory.final, assessment.month, "_cleaning_log.xlsx"))
+
+##########################################################################################################
+# Step 5: save summary of number of prices
+##########################################################################################################
+
+summary.num.prices <- get.num.prices(raw.step2)
+write.xlsx(summary.num.prices, paste0(directory.final, assessment.month, "_summary_number_prices.xlsx"))
 

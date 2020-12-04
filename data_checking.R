@@ -273,21 +273,16 @@ cleaning.log <- select(cleaning.log, all_of(cleaning.log.cols))
 ##########################################################################################################
 
 # save dataset_checked
-write.xlsx(raw.step1, paste0(directory.checking, "dataset_checked.xlsx"))
+write.xlsx(raw.step1, paste0(directory.checking, assessment.month, "_dataset_checked.xlsx"))
 
-# save summary of number of prices per woreda
-cols<- colnames(raw.step1)[str_detect(colnames(raw.step1), "price_per_unit")]
-summary <- raw.step1 %>% group_by(adm3_woreda) %>% select(cols) %>% summarise_all(~sum(!is.na(.)))
-colnames(summary) <- c("adm3_woreda", str_remove_all(cols, "_price_per_unit"))
-write.xlsx(summary, paste0(directory.checking, "summary_prices_woreda.xlsx"))
-summary <- raw.step1 %>% group_by(adm2_zone) %>% select(cols) %>% summarise_all(~sum(!is.na(.)))
-colnames(summary) <- c("adm2_zone", str_remove_all(cols, "_price_per_unit"))
-write.xlsx(summary, paste0(directory.checking, "summary_prices_zone.xlsx"))
+# save summary of number of prices per admin
+summary.num.prices <- get.num.prices(raw.step1)
+write.xlsx(summary.num.prices, paste0(directory.checking, assessment.month, "_summary_number_prices.xlsx"))
 
 # save changes made to dataset_raw to produce dataset_checked
 # cl <- rbind(cl.gps, cl.other, cl.logical.check1, cl.logical.check2)  # uncomment if gps checks are used
 cl <- rbind(cl.other, cl.logical.check1, cl.logical.check2)  # uncomment if gps checks are not used
-write.xlsx(cl, paste0(directory.checking, "cleaning.log.checking.xlsx"))
+write.xlsx(cl, paste0(directory.checking, assessment.month, "_cleaning_log_checking.xlsx"))
 
 # split follow up requests
 for (p in unique(cleaning.log$partner)){

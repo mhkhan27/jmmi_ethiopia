@@ -66,6 +66,18 @@ get.mode <- function(x){
   uniqx <- unique(x)
   uniqx[which.max(tabulate(match(x, uniqx)))]
 }
+# generate data.frame with number of prices for each item at all admin level
+get.num.prices <- function(data){
+  cols <- colnames(data)[str_detect(colnames(data), "price_per_unit")]
+  df0 <- data %>% select(all_of(cols)) %>% summarise_all(~sum(!is.na(.))) %>% mutate(admin="ET")
+  df1 <- data %>% group_by(adm1_region) %>% select(all_of(cols)) %>% summarise_all(~sum(!is.na(.))) %>% 
+    rename(admin=adm1_region)
+  df2 <- data %>% group_by(adm2_zone) %>% select(all_of(cols)) %>% summarise_all(~sum(!is.na(.))) %>% 
+    rename(admin=adm2_zone)
+  df3 <- data %>% group_by(adm3_woreda) %>% select(all_of(cols)) %>% summarise_all(~sum(!is.na(.))) %>% 
+    rename(admin=adm3_woreda)
+  return(rbind(df0, df1, df2, df3) %>% relocate(admin, .before=1))
+}
 
 ##########################################################################################################
 # FUNCTIONS FOR DATA CHECKING
