@@ -193,8 +193,8 @@ add.price.per.unit <- function(df, test=F){
   }
   # calculate price per unit for water
   df$water_price_per_unit <- df$water_price_base/df$truck_capacity
-  df$water_price_per_unit_5km <- df$water_price_5km/df$truck_capacity
-  df$water_price_per_unit_10km <- df$water_price_10km/df$truck_capacity
+  df$water_5km_price_per_unit <- df$water_price_5km/df$truck_capacity
+  df$water_10km_price_per_unit <- df$water_price_10km/df$truck_capacity
   return(df)
 }
 # generate a data.frame with the columns used to calculate the price_per_unit of a given item (to be inspected)
@@ -202,7 +202,7 @@ test.price.per.unit <- function(df, item){
   if (item=="water"){
     df <- df %>% 
       select("truck_capacity", "water_price_base", "water_price_5km", "water_price_10km",
-             "water_price_per_unit", "water_price_per_unit_5km", "water_price_per_unit_10km") %>% 
+             "water_price_per_unit", "water_5km_price_per_unit", "water_10km_price_per_unit") %>% 
       filter(!is.na(truck_capacity))
   } else{
     df <- df %>% 
@@ -266,8 +266,8 @@ create.outliers.cleaning.log <- function(outliers){
     outlier.type <- as.character(outliers[r, "outlier.type"])
     # get price variable
     if (variable=="water_price_per_unit") price.variable <- "water_price_base"
-    else if (variable=="water_price_per_unit_5km") price.variable <- "water_price_5km"
-    else if (variable=="water_price_per_unit_10km") price.variable <- "water_price_10km"
+    else if (variable=="water_5km_price_per_unit") price.variable <- "water_price_5km"
+    else if (variable=="water_10km_price_per_unit") price.variable <- "water_price_10km"
     else price.variable <- paste0(item, "_price")
     # get reported unit and quantity
     if (item=="water"){
@@ -374,7 +374,10 @@ get.cleaning.log <- function(x, y){
   price.old <- as.numeric(x[x$variable=="price", "old.value"])
   price.new <- as.numeric(x[x$variable=="price", "new.value"])
   cl <- data.frame()
-  if (quantity.old!=quantity.new | unit.old!=unit.new | price.old!=price.new){
+  if (is.na(quantity.new) & is.na(unit.new) & is.na(price.new)){
+    # all new values are NAs -> remove price
+    cl <- rbind(cl, get.entry.log(uuid, item, NA, NA, NA, NA, NA))
+  } else if (quantity.old!=quantity.new | unit.old!=unit.new | price.old!=price.new){
     if (item=="water"){
       cl <- rbind(cl, get.entry.log.water(uuid, item, "no", "gram", quantity.new, NA, price.new))
     } else if (unit.new=="gram"){
@@ -385,7 +388,7 @@ get.cleaning.log <- function(x, y){
       cl <- rbind(cl, get.entry.log(uuid, item, "yes", NA, NA, NA, price.new/quantity.new))
     } else if (unit.new %in% as.character(tool.choices[tool.choices$list_name=="nonstandard_units",]$name)){
       cl <- rbind(cl, get.entry.log(uuid, item, "no", unit.new, NA, NA, price.new/quantity.new))
-    }
+    } else stop("unit.new unknown")
   }
   return(cl)
 }
@@ -427,12 +430,20 @@ analyse.select_multiple <- function(df, admin.col, variable){
   colnames(d) <- str_replace(colnames(d), "/", ".")
   return(d)
 }
-# function to analyse numeric variables
-analyse.numeric <- function(df, admin.col, variable){
+# function to calculate median of numeric variables
+analyse.numeric.median <- function(df, admin.col, variable){
   d <- df %>% 
     filter(!is.na(!!sym(variable))) %>% 
     group_by(!!sym(admin.col)) %>%
     summarise(!!variable := median(!!sym(variable)))
+  return(d)
+}
+# function to calculate sum of numeric variables
+analyse.numeric.sum <- function(df, admin.col, variable){
+  d <- df %>% 
+    filter(!is.na(!!sym(variable))) %>% 
+    group_by(!!sym(admin.col)) %>%
+    summarise(!!variable := sum(!!sym(variable)))
   return(d)
 }
 # function to run the analysis on all indicators
@@ -445,12 +456,14 @@ run.analysis <- function(data, admin.output){
     if (variable %in% tool.survey$name){
       q.type <- str_split(get.value(tool.survey, "name", variable, "type"), " ")[[1]][1]
     } else if (str_detect(variable, "_price_per_unit")) q.type <- "numeric"
+    else if (str_detect(variable, "number_prices")) q.type <- "number_prices"
     else stop("Variable unknown")
     cols <- indicators$col.name[str_starts(indicators$col.name, variable)]
     df <- data[c(admin.output, all_of(cols))]
     if (q.type=="select_one") return(analyse.select_one(df, admin.output, variable))
     if (q.type=="select_multiple") return(analyse.select_multiple(df, admin.output, variable))
-    if (q.type %in% c("numeric", "integer")) return(analyse.numeric(df, admin.output, variable))
+    if (q.type %in% c("numeric", "integer")) return(analyse.numeric.median(df, admin.output, variable))
+    if (q.type=="number_prices") return(analyse.numeric.sum(df, admin.output, variable))
     stop("Uncatched error")
   })
   return(r %>% reduce(full_join, by=admin.output) %>% rename(admin=admin.output))

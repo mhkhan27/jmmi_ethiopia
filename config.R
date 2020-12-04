@@ -48,7 +48,7 @@ base.prices <- c(as.character(lapply(all.items, function(x) paste0(x, "_price"))
 # get list of columns to be checked for outliers
 cols.outliers1 <- c(as.character(lapply(all.items, function(x) paste0(x, "_price_per_unit"))),
                     "water_price_per_unit", 
-                    "water_price_per_unit_5km", "water_price_per_unit_10km")
+                    "water_5km_price_per_unit", "water_10km_price_per_unit")
 
 # get list of columns to be checked for generic outliers
 cols.outliers.gen <- c(as.character(lapply(all.items, function(x) paste0(x, "_stock_days"))),

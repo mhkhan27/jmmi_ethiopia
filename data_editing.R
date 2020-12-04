@@ -18,12 +18,15 @@ responses <- do.call(plyr::rbind.fill,
                      lapply(response.filenames, function(x) read_excel(x, sheet=1, col_types="text")))
 write.xlsx(responses, paste0(directory.final, assessment.month, "_follow_up_responses.xlsx"))
 
+# check that number of responses = number of requests
+request.filenames <- list.files(directory.requests, pattern="*.xlsx", recursive=TRUE, full.names=TRUE)
+requests <- do.call(plyr::rbind.fill, 
+                    lapply(request.filenames, function(x) read_excel(x, sheet=1, col_types="text")))
+if (nrow(responses) != nrow(requests)) stop("Number of responses does not match number of requests")
+
 ##########################################################################################################
 # Step 2: generate cleaning log
 ##########################################################################################################
-
-# load file with combined responses
-responses <- read_excel(paste0(directory.final, assessment.month, "_follow_up_responses.xlsx"), col_types="text")
 
 # split responses for outliers and logical checks
 responses.outlier.price <- filter(responses, check.id=="Outlier.price")
@@ -52,15 +55,26 @@ cl.editing <- cl.editing %>% mutate(modified=case_when(
 # Step 3: apply changes, re-calculate price_per_unit and save dataset_cleaned
 ##########################################################################################################
 
+# 1) apply changes
 raw.step2 <- apply.changes(raw.step1, cl.editing)
+# 2) re-calculate price_per_unit
 raw.step2 <- add.price.per.unit(raw.step2)
+# 3) remove personal data
+cols.personal.data <- c("deviceid", "partner", "partner_other", "enumerator_id", "shop", "vendor", "phone", 
+                        "general_comments", "enumerator_comments",
+                        "gps", "_gps_latitude", "_gps_longitude", "_gps_altitude", "_gps_precision")
+raw.step2 <- raw.step2 %>% select(-all_of(cols.personal.data))
+# 4) save dataset
 write.xlsx(raw.step2, paste0(directory.final, assessment.month, "_dataset_cleaned.xlsx"))
 
 ##########################################################################################################
 # Step 4: combine cleaning logs and save
 ##########################################################################################################
 
+# 1) read cleaning log from checking script
 cl.checking <- read_excel(paste0(directory.checking, "cleaning.log.checking.xlsx"))
+# 2) combine cleaning logs from checking and editing
 cl.combined <- rbind(cl.checking, cl.editing)
+# 3) save combined cleaning log
 write.xlsx(cl.combined, paste0(directory.final, assessment.month, "_cleaning_log.xlsx"))
 

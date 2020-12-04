@@ -14,7 +14,7 @@ data <- read_excel(paste0(directory.final, assessment.month, "_dataset_cleaned.x
 # Step 2: aggregate at woreda level <-- basis for the entire analysis
 ##########################################################################################################
 
-cols <- colnames(data)[!(colnames(data) %in% c("adm3_woreda", "partner", "phone")) &
+cols <- colnames(data)[!(colnames(data) %in% c("adm3_woreda")) &
                          !str_starts(colnames(data), "type_vendor") &
                          !str_ends(colnames(data), "_standard_unit") &
                          !str_ends(colnames(data), "_nonstandard_unit") &
@@ -54,6 +54,15 @@ data.woreda <- lapply(cols, function(x){
   return(NULL)
 })
 data.woreda <- data.woreda[!sapply(data.woreda, is.null)] %>% reduce(full_join, by="adm3_woreda")
+
+# add number of prices for each item
+cols <- colnames(data)[str_detect(colnames(data), "price_per_unit")]
+num.prices <- data %>% group_by(adm3_woreda) %>% select(cols) %>% summarise_all(~sum(!is.na(.)))
+colnames(num.prices) <- lapply(colnames(num.prices), function(x){
+  return(ifelse(x=="adm3_woreda", x, paste0("number_prices_", str_split(x, "_price_per_unit")[[1]][1])))})
+data.woreda <- left_join(data.woreda, num.prices, by="adm3_woreda")
+
+# save dataset aggregated at woreda level
 # write.xlsx(data.woreda, paste0(directory.final, assessment.month, "_dataset_aggregated_woreda.xlsx"))
 
 ##########################################################################################################
