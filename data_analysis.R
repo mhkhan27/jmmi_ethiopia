@@ -61,6 +61,8 @@ num.prices <- data %>% group_by(adm3_woreda) %>% select(all_of(cols)) %>% summar
 colnames(num.prices) <- lapply(colnames(num.prices), function(x){
   return(ifelse(x=="adm3_woreda", x, paste0("number_prices_", str_split(x, "_price_per_unit")[[1]][1])))})
 data.woreda <- left_join(data.woreda, num.prices, by="adm3_woreda")
+data.woreda <- data.woreda %>% 
+  relocate(colnames(data.woreda)[str_starts(colnames(data.woreda), "number_prices_")], .before=cols[1])
 
 ##########################################################################################################
 # Step 3: generate analysis output for InDesign
@@ -89,7 +91,7 @@ analysis <- rbind(analysis.national, analysis.region, analysis.zone, analysis.wo
 analysis <- calculate.basket.cost(analysis)
 
 # add time trends for prices per unit and basket cost
-analysis <- calculate.time.trends(analysis, num.months=1)
+# analysis <- calculate.time.trends(analysis, num.months=1)
 
 # save analysis
 write.xlsx(analysis, paste0(directory.final, assessment.month, "_analysis_InDesign.xlsx"))
@@ -113,5 +115,5 @@ data <- data.woreda[cols] %>%
 analysis.boxplot(data, "all_items")
 
 # one boxplot for each category (meat_items, water_items, other_items)
-r <- data %>% group_by(category) %>% group_map(~analysis.boxplot(.x,.y))
+t <- data %>% group_by(category) %>% group_map(~analysis.boxplot(.x,.y))
 
