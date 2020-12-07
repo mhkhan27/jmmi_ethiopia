@@ -442,7 +442,7 @@ analyse.select_multiple <- function(df, admin.col, variable){
   colnames(d) <- str_replace(colnames(d), "/", ".")
   return(d)
 }
-# function to calculate median of numeric variables
+# function to calculate median of numeric variable
 analyse.numeric.median <- function(df, admin.col, variable){
   d <- df %>% 
     filter(!is.na(!!sym(variable))) %>% 
@@ -450,7 +450,7 @@ analyse.numeric.median <- function(df, admin.col, variable){
     summarise(!!variable := median(!!sym(variable)))
   return(d)
 }
-# function to calculate sum of numeric variables
+# function to calculate sum of numeric variable
 analyse.numeric.sum <- function(df, admin.col, variable){
   d <- df %>% 
     filter(!is.na(!!sym(variable))) %>% 
@@ -517,3 +517,51 @@ analysis.boxplot <- function(data, category){
   ggsave(paste0(directory.final, assessment.month, "_analysis_boxplot_", category, ".pdf"), 
          width=2*num.items, height=12, units="cm", device="pdf")
 }
+# function to calculate JMMI basket
+calculate.basket.cost <- function(df){
+  df <- df %>% 
+    mutate(JMMI.basket.cost = 
+             1 * maize_price_per_unit +
+             1 * sorghum_price_per_unit +
+             1 * teff_price_per_unit +
+             1 * wheat_price_per_unit +
+             1 * barley_price_per_unit +
+             1 * enset_price_per_unit +
+             1 * rice_price_per_unit +
+             1 * beef_price_per_unit +
+             1 * mutton_price_per_unit +
+             1 * goat_meat_price_per_unit +
+             1 * vegetables_leafy_darkgreen_price_per_unit +
+             1 * cooking_oil_price_per_unit +
+             1 * bath_soap_price_per_unit +
+             1 * bleach_price_per_unit + 
+             1000 * water_price_per_unit)
+  return(df)
+}
+# function to get the list of columns to be used on the time trends calculation
+get.columns.time.trends <- function(df){
+  cols <- colnames(df)
+  return(cols[str_detect(cols, "price_per_unit") | cols=="JMMI.basket.cost"])
+}
+# function to calculate time trends
+calculate.time.trends <- function(analysis, num.months){
+  # load previous analysis to be used as reference in the calculation of the time trend
+  this.month.date <- as.Date(paste0(assessment.month, "-01"), "%Y-%m-%d")
+  ref.month <- str_sub(seq(this.month.date, length=2, by=paste0("-", num.months, " month"))[2], 1, 7)
+  filename.ref.analysis <- paste0(directory.final, ref.month, "_analysis_InDesign.xlsx")
+  if (!file.exists(filename.ref.analysis)) stop(paste0(filename.ref.analysis, " not found"))
+  ref.analysis <- read_excel(filename.ref.analysis, guess_max=20000)
+  # determine list of columns in common between the 2 periods -> to be used in the time trends calculation
+  cols <- intersect(get.columns.time.trends(ref.analysis), get.columns.time.trends(analysis))
+  # calculate time trends for all selected columns
+  time.trends <- do.call(cbind, lapply(cols, function(x){
+    item <- ifelse(x=="JMMI.basket.cost", x, str_split(x, "_price_per")[[1]][1])
+    new.col.name <- paste0("price.change.", num.months, "months.", item)
+    df <- data.frame(col = round((analysis[[x]]-ref.analysis[[x]])/ref.analysis[[x]], digits=4))
+    colnames(df) <- new.col.name
+    return(df)
+  }))
+  return(analysis %>% cbind(time.trends))
+}
+
+

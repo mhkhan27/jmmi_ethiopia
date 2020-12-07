@@ -57,13 +57,10 @@ data.woreda <- data.woreda[!sapply(data.woreda, is.null)] %>% reduce(full_join, 
 
 # add number of prices for each item
 cols <- colnames(data)[str_detect(colnames(data), "price_per_unit")]
-num.prices <- data %>% group_by(adm3_woreda) %>% select(cols) %>% summarise_all(~sum(!is.na(.)))
+num.prices <- data %>% group_by(adm3_woreda) %>% select(all_of(cols)) %>% summarise_all(~sum(!is.na(.)))
 colnames(num.prices) <- lapply(colnames(num.prices), function(x){
   return(ifelse(x=="adm3_woreda", x, paste0("number_prices_", str_split(x, "_price_per_unit")[[1]][1])))})
 data.woreda <- left_join(data.woreda, num.prices, by="adm3_woreda")
-
-# save dataset aggregated at woreda level
-# write.xlsx(data.woreda, paste0(directory.final, assessment.month, "_dataset_aggregated_woreda.xlsx"))
 
 ##########################################################################################################
 # Step 3: generate analysis output for InDesign
@@ -73,9 +70,10 @@ data.woreda <- left_join(data.woreda, num.prices, by="adm3_woreda")
 analysis.national <- run.analysis(data.woreda, "adm0_national")
 analysis.region <- run.analysis(data.woreda, "adm1_region")
 analysis.zone <- run.analysis(data.woreda, "adm2_zone")
+analysis.woreda <- run.analysis(data.woreda, "adm3_woreda")
 
 # combine analysis and add names
-analysis <- rbind(analysis.national, analysis.region, analysis.zone) %>%
+analysis <- rbind(analysis.national, analysis.region, analysis.zone, analysis.woreda) %>%
   mutate(admin.level=case_when(
     str_length(admin)==2 ~ "National",
     str_length(admin)==4 ~ "Region",
@@ -86,6 +84,12 @@ analysis <- rbind(analysis.national, analysis.region, analysis.zone) %>%
   rename(admin.pcode=admin, admin.name="label::English") %>% 
   relocate(admin.level, .before="admin.pcode") %>% 
   relocate(admin.name, .after="admin.pcode")
+
+# add JMMI basket cost
+analysis <- calculate.basket.cost(analysis)
+
+# add time trends for prices per unit and basket cost
+analysis <- calculate.time.trends(analysis, num.months=1)
 
 # save analysis
 write.xlsx(analysis, paste0(directory.final, assessment.month, "_analysis_InDesign.xlsx"))
@@ -105,9 +109,9 @@ data <- data.woreda[cols] %>%
     str_detect(item, "Water") ~ "water_items",
     TRUE ~ "other_items"))
 
-# boxplot with all items
+# one boxplot with all items
 analysis.boxplot(data, "all_items")
 
-# one boxplot for each category (meat_items, other_items)
+# one boxplot for each category (meat_items, water_items, other_items)
 r <- data %>% group_by(category) %>% group_map(~analysis.boxplot(.x,.y))
 
