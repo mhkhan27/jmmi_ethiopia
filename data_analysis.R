@@ -69,10 +69,10 @@ data.woreda <- data.woreda %>%
 ##########################################################################################################
 
 # run analysis for each admin aggregation
-analysis.national <- run.analysis(data.woreda, "adm0_national")
-analysis.region <- run.analysis(data.woreda, "adm1_region")
-analysis.zone <- run.analysis(data.woreda, "adm2_zone")
 analysis.woreda <- run.analysis(data.woreda, "adm3_woreda")
+analysis.zone <- run.analysis(data.woreda, "adm2_zone")
+analysis.region <- run.analysis(data.woreda, "adm1_region")
+analysis.national <- run.analysis(data.woreda, "adm0_national")
 
 # combine analysis and add names
 analysis <- rbind(analysis.national, analysis.region, analysis.zone, analysis.woreda) %>%
@@ -88,10 +88,23 @@ analysis <- rbind(analysis.national, analysis.region, analysis.zone, analysis.wo
   relocate(admin.name, .after="admin.pcode")
 
 # add JMMI basket cost
-analysis <- calculate.basket.cost(analysis)
+analysis <- calculate.basket.cost(analysis, "full")
+analysis <- calculate.basket.cost(analysis, "food")
+
+# add prices in USD
+df <- analysis[get.columns.prices.baskets(analysis)] * BIRR.to.USD
+colnames(df) <- as.character(lapply(colnames(df), function(x) paste0(x, ".USD")))
+analysis <- cbind(analysis, df)
 
 # add time trends for prices per unit and basket cost
 # analysis <- calculate.time.trends(analysis, num.months=1)
+
+# add summary columns based on non-aggregated dataset
+data.partners <- read_excel(filename.raw.dataset, sheet=1, col_types="text") %>% 
+  rename(uuid="_uuid") %>% select(uuid, partner) %>% distinct()
+res <- do.call(rbind, lapply(c("adm0_national", "adm1_region", "adm2_zone", "adm3_woreda"),
+                      function(x) calculate.summary.columns(data, data.partners, x)))
+analysis <- left_join(analysis, res, by="admin.pcode")
 
 # save analysis
 write.xlsx(analysis, paste0(directory.final, assessment.month, "_analysis_InDesign.xlsx"))

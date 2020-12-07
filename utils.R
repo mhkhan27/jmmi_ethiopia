@@ -517,10 +517,13 @@ analysis.boxplot <- function(data, category){
   ggsave(paste0(directory.final, assessment.month, "_analysis_boxplot_", category, ".pdf"), 
          width=2*num.items, height=12, units="cm", device="pdf")
 }
-# function to calculate JMMI basket
-calculate.basket.cost <- function(df){
+# function to calculate basket cost (full or food basket)
+calculate.basket.cost <- function(df, type){
+  if (!(type %in% c("full", "food"))) stop("Type of basket is unknown")
+  is.full <- ifelse(type=="full", 1, 0)
+  col.name <- ifelse(type=="full", "full.basket.cost", "food.basket.cost")
   df <- df %>% 
-    mutate(JMMI.basket.cost = 
+    mutate(!!col.name := 
              1 * maize_price_per_unit +
              1 * sorghum_price_per_unit +
              1 * teff_price_per_unit +
@@ -533,15 +536,15 @@ calculate.basket.cost <- function(df){
              1 * goat_meat_price_per_unit +
              1 * vegetables_leafy_darkgreen_price_per_unit +
              1 * cooking_oil_price_per_unit +
-             1 * bath_soap_price_per_unit +
-             1 * bleach_price_per_unit + 
+             is.full * 1 * bath_soap_price_per_unit +
+             is.full * 1 * bleach_price_per_unit + 
              1000 * water_price_per_unit)
   return(df)
 }
-# function to get the list of columns to be used on the time trends calculation
-get.columns.time.trends <- function(df){
+# function to get the list of columns containing prices and basket costs
+get.columns.prices.baskets <- function(df){
   cols <- colnames(df)
-  return(cols[str_detect(cols, "price_per_unit") | cols=="JMMI.basket.cost"])
+  return(cols[str_ends(cols, "price_per_unit|.basket.cost")])
 }
 # function to calculate time trends
 calculate.time.trends <- function(analysis, num.months){
@@ -552,7 +555,7 @@ calculate.time.trends <- function(analysis, num.months){
   if (!file.exists(filename.ref.analysis)) stop(paste0(filename.ref.analysis, " not found"))
   ref.analysis <- read_excel(filename.ref.analysis, guess_max=20000)
   # determine list of columns in common between the 2 periods -> to be used in the time trends calculation
-  cols <- intersect(get.columns.time.trends(ref.analysis), get.columns.time.trends(analysis))
+  cols <- intersect(get.columns.prices.baskets(ref.analysis), get.columns.prices.baskets(analysis))
   # calculate time trends for all selected columns
   time.trends <- do.call(cbind, lapply(cols, function(x){
     item <- ifelse(x=="JMMI.basket.cost", x, str_split(x, "_price_per")[[1]][1])
@@ -563,5 +566,18 @@ calculate.time.trends <- function(analysis, num.months){
   }))
   return(analysis %>% cbind(time.trends))
 }
-
-
+# function to add summary columns to the analysis
+calculate.summary.columns <- function(data, data.partners, admin.level){
+  if (admin.level=="adm0_national") data$adm0_national="ET"
+  number.commodities.accessed <- length(all.items) + 1
+  res <- data %>% left_join(data.partners, by="uuid") %>% group_by(!!sym(admin.level)) %>% 
+    summarise(summary.first.date.data.collection = min(date_of_dc),
+              summary.last.date.data.collection = max(date_of_dc),
+              summary.number.participating.agencies = length(unique(partner)),
+              summary.number.traders.interviewed = n(),
+              summary.number.markets.accessed = length(unique(marketplace)),
+              summary.number.woredas.accessed = length(unique(adm3_woreda)),
+              summary.number.commodities.assessed = number.commodities.accessed) %>% 
+    rename(admin.pcode=!!sym(admin.level))
+  return(res)
+}

@@ -13,6 +13,7 @@ filename.tool <- "resources/ETH_JMMI_Kobo_v2.xlsx"
 filename.email.list <- "resources/2020-07-15_email_list.xlsx"
 filename.sendinblue.api.key <- "./api_key.txt"
 filename.raw.dataset <- "data/20201130_data_submission.xlsx"
+BIRR.to.USD <- 0.026
 
 ##########################################################################################################
 # PLEASE DO NOT CHANGE THE FOLLOWING PARAMETERS
