@@ -463,7 +463,7 @@ run.analysis <- function(data, admin.output){
   indicators <- data.frame(col.name=colnames(data)) %>% 
     filter(!(col.name %in% c("adm1_region", "adm2_zone", "adm3_woreda")))
   indicators$variable <- apply(indicators, 1, function(x) str_split(x, "/")[[1]][1])
-  if (admin.output=="adm0_national") data$adm0_national="ET"
+  if (admin.output=="adm0_nation") data$adm0_nation="ET"
   r <- lapply(unique(indicators$variable), function(variable){
     if (variable %in% tool.survey$name){
       q.type <- str_split(get.value(tool.survey, "name", variable, "type"), " ")[[1]][1]
@@ -538,7 +538,7 @@ calculate.basket.cost <- function(df, type){
              1 * cooking_oil_price_per_unit +
              is.full * 1 * bath_soap_price_per_unit +
              is.full * 1 * bleach_price_per_unit + 
-             1000 * water_price_per_unit)
+             is.full * 1000 * water_price_per_unit)
   return(df)
 }
 # function to get the list of columns containing prices and basket costs
@@ -568,7 +568,7 @@ calculate.time.trends <- function(analysis, num.months){
 }
 # function to add summary columns to the analysis
 calculate.summary.columns <- function(data, data.partners, admin.level){
-  if (admin.level=="adm0_national") data$adm0_national="ET"
+  if (admin.level=="adm0_nation") data$adm0_nation="ET"
   number.commodities.accessed <- length(all.items) + 1
   res <- data %>% left_join(data.partners, by="uuid") %>% group_by(!!sym(admin.level)) %>% 
     summarise(summary.first.date.data.collection = min(date_of_dc),

@@ -68,16 +68,16 @@ data.woreda <- data.woreda %>%
 # Step 3: generate analysis output for InDesign
 ##########################################################################################################
 
-# run analysis for each admin aggregation
+# run analysis for each admin level
 analysis.woreda <- run.analysis(data.woreda, "adm3_woreda")
 analysis.zone <- run.analysis(data.woreda, "adm2_zone")
 analysis.region <- run.analysis(data.woreda, "adm1_region")
-analysis.national <- run.analysis(data.woreda, "adm0_national")
+analysis.national <- run.analysis(data.woreda, "adm0_nation")
 
 # combine analysis and add names
 analysis <- rbind(analysis.national, analysis.region, analysis.zone, analysis.woreda) %>%
   mutate(admin.level=case_when(
-    str_length(admin)==2 ~ "National",
+    str_length(admin)==2 ~ "Nation",
     str_length(admin)==4 ~ "Region",
     str_length(admin)==6 ~ "Zone",
     str_length(admin)==8 ~ "Woreda",
@@ -102,7 +102,7 @@ analysis <- cbind(analysis, df)
 # add summary columns based on non-aggregated dataset
 data.partners <- read_excel(filename.raw.dataset, sheet=1, col_types="text") %>% 
   rename(uuid="_uuid") %>% select(uuid, partner) %>% distinct()
-res <- do.call(rbind, lapply(c("adm0_national", "adm1_region", "adm2_zone", "adm3_woreda"),
+res <- do.call(rbind, lapply(c("adm0_nation", "adm1_region", "adm2_zone", "adm3_woreda"),
                       function(x) calculate.summary.columns(data, data.partners, x)))
 analysis <- left_join(analysis, res, by="admin.pcode")
 
