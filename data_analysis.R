@@ -8,7 +8,7 @@ source("./config.R")
 # Step 1: load dataset
 ##########################################################################################################
 
-data <- read_excel(paste0(directory.final, assessment.month, "_dataset_cleaned.xlsx"), guess_max = 20000)
+data <- read_excel(paste0("output/editing/", assessment.month, "_dataset_cleaned.xlsx"), guess_max = 20000)
 
 ##########################################################################################################
 # Step 2: aggregate at woreda level <-- basis for the entire analysis
@@ -107,7 +107,7 @@ res <- do.call(rbind, lapply(c("adm0_nation", "adm1_region", "adm2_zone", "adm3_
 analysis <- left_join(analysis, res, by="admin.pcode")
 
 # save analysis
-write.xlsx(analysis, paste0(directory.final, assessment.month, "_analysis_InDesign.xlsx"))
+write.xlsx(analysis, paste0("output/analysis/", assessment.month, "_analysis_InDesign.xlsx"))
 
 ##########################################################################################################
 # Step 4: generate boxplots at national level
@@ -129,4 +129,12 @@ analysis.boxplot(data, "all_items")
 
 # one boxplot for each category (meat_items, water_items, other_items)
 t <- data %>% group_by(category) %>% group_map(~analysis.boxplot(.x,.y))
+
+##########################################################################################################
+# Step 5: generate CSV file for the coverage map
+##########################################################################################################
+
+df <- analysis %>% filter(admin.level=="Woreda") %>% 
+  select("admin.pcode") %>% rename(assessed_woreda=admin.pcode)
+write_csv(df, paste0("output/analysis/", assessment.month, "_assessed_woreda_GIS.csv"))
 

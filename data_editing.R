@@ -9,17 +9,17 @@ source("./config.R")
 ##########################################################################################################
 
 # load dataset_checked
-raw.step1 <- read_excel(paste0(directory.checking, assessment.month, "_dataset_checked.xlsx"), col_types="text")
+raw.step1 <- read_excel(paste0("output/checking/", assessment.month, "_dataset_checked.xlsx"), col_types="text")
 raw.step1 <- to.double(raw.step1, columns=get.numeric.columns())
 
 # load and combine responses
-response.filenames <- list.files(directory.responses, pattern="*.xlsx", recursive=TRUE, full.names=TRUE)
+response.filenames <- list.files("output/fu_responses/", pattern="*.xlsx", recursive=TRUE, full.names=TRUE)
 responses <- do.call(plyr::rbind.fill, 
                      lapply(response.filenames, function(x) read_excel(x, sheet=1, col_types="text")))
-write.xlsx(responses, paste0(directory.final, assessment.month, "_follow_up_responses.xlsx"))
+write.xlsx(responses, paste0("output/editing/", assessment.month, "_follow_up_responses.xlsx"))
 
 # check that number of responses = number of requests
-request.filenames <- list.files(directory.requests, pattern="*.xlsx", recursive=TRUE, full.names=TRUE)
+request.filenames <- list.files("output/fu_requests/", pattern="*.xlsx", recursive=TRUE, full.names=TRUE)
 requests <- do.call(plyr::rbind.fill, 
                     lapply(request.filenames, function(x) read_excel(x, sheet=1, col_types="text")))
 if (nrow(responses) != nrow(requests)) stop("Number of responses does not match number of requests")
@@ -65,23 +65,23 @@ cols.personal.data <- c("deviceid", "partner", "partner_other", "enumerator_id",
                         "gps", "_gps_latitude", "_gps_longitude", "_gps_altitude", "_gps_precision")
 raw.step2 <- raw.step2 %>% select(-all_of(cols.personal.data))
 # 4) save dataset
-write.xlsx(raw.step2, paste0(directory.final, assessment.month, "_dataset_cleaned.xlsx"))
+write.xlsx(raw.step2, paste0("output/editing/", assessment.month, "_dataset_cleaned.xlsx"))
 
 ##########################################################################################################
 # Step 4: combine cleaning logs and save
 ##########################################################################################################
 
 # 1) read cleaning log from checking script
-cl.checking <- read_excel(paste0(directory.checking, assessment.month, "_cleaning_log_checking.xlsx"))
+cl.checking <- read_excel(paste0("output/checking/", assessment.month, "_cleaning_log_checking.xlsx"))
 # 2) combine cleaning logs from checking and editing
 cl.combined <- rbind(cl.checking, cl.editing)
 # 3) save combined cleaning log
-write.xlsx(cl.combined, paste0(directory.final, assessment.month, "_cleaning_log.xlsx"))
+write.xlsx(cl.combined, paste0("output/editing/", assessment.month, "_cleaning_log.xlsx"))
 
 ##########################################################################################################
 # Step 5: save summary of number of prices
 ##########################################################################################################
 
 summary.num.prices <- get.num.prices(raw.step2)
-write.xlsx(summary.num.prices, paste0(directory.final, assessment.month, "_summary_number_prices.xlsx"))
+write.xlsx(summary.num.prices, paste0("output/editing/", assessment.month, "_summary_number_prices.xlsx"))
 

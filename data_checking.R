@@ -49,7 +49,7 @@ m <- leaflet() %>%
   addCircleMarkers(data = survey.points, radius=5, color = "#FF00FF", stroke=F, fillOpacity = 0.5, 
                    label = paste0(survey.points$partner, "_", survey.points$adm3_woreda)) %>% 
   addTiles()
-mapshot(m, file=paste0(directory.checking, assessment.month, "_map_samples.pdf"))  # <-- takes 1 minute
+mapshot(m, file=paste0("output/checking/", assessment.month, "_map_samples.pdf"))  # <-- takes 1 minute
 
 # 4) check that reported woreda is within the woreda polygon
 raw.check <- st_drop_geometry(survey.points) %>% 
@@ -273,16 +273,16 @@ cleaning.log <- select(cleaning.log, all_of(cleaning.log.cols))
 ##########################################################################################################
 
 # save dataset_checked
-write.xlsx(raw.step1, paste0(directory.checking, assessment.month, "_dataset_checked.xlsx"))
+write.xlsx(raw.step1, paste0("output/checking/", assessment.month, "_dataset_checked.xlsx"))
 
 # save summary of number of prices per admin
 summary.num.prices <- get.num.prices(raw.step1)
-write.xlsx(summary.num.prices, paste0(directory.checking, assessment.month, "_summary_number_prices.xlsx"))
+write.xlsx(summary.num.prices, paste0("output/checking/", assessment.month, "_summary_number_prices.xlsx"))
 
 # save changes made to dataset_raw to produce dataset_checked
 # cl <- rbind(cl.gps, cl.other, cl.logical.check1, cl.logical.check2)  # uncomment if gps checks are used
 cl <- rbind(cl.other, cl.logical.check1, cl.logical.check2)  # uncomment if gps checks are not used
-write.xlsx(cl, paste0(directory.checking, assessment.month, "_cleaning_log_checking.xlsx"))
+write.xlsx(cl, paste0("output/checking/", assessment.month, "_cleaning_log_checking.xlsx"))
 
 # split follow up requests
 for (p in unique(cleaning.log$partner)){

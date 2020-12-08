@@ -16,16 +16,6 @@ filename.raw.dataset <- "data/20201130_data_submission.xlsx"
 BIRR.to.USD <- 0.026
 
 ##########################################################################################################
-# PLEASE DO NOT CHANGE THE FOLLOWING PARAMETERS
-##########################################################################################################
-# directories
-directory.requests <- "output/partner_requests/"
-directory.responses <- "output/partner_responses/"
-directory.final <- "output/final/"
-directory.checking <- "output/checking/"
-directory.outputs <- "output/"
-
-##########################################################################################################
 # LOAD TOOL AND GENERATE VARIABLES BASED ON TOOL
 ##########################################################################################################
 

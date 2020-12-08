@@ -168,7 +168,7 @@ save.follow.up.requests <- function(cl, partner){
       addStyle(wb, "Follow-up", style=style.input, rows=r:(r+1), cols=col.id+2)
     } else random.color=""
   }
-  filename <- paste0(directory.requests, assessment.month, "_", partner, "_follow_up_requests.xlsx")
+  filename <- paste0("output/fu_requests/", assessment.month, "_", partner, "_follow_up_requests.xlsx")
   saveWorkbook(wb, filename, overwrite = TRUE)
 }
 
@@ -336,7 +336,7 @@ generate.price.outliers.boxplot <- function(){
     geom_point(aes(x=adm0, y=(as.numeric(value))), 
                alpha=f.alpha(df$detected), colour=f.colour(df$detected)) +
     facet_wrap(~variable, scales="free_y", nrow = 6, ncol = 3)
-  ggsave(paste0(directory.checking, assessment.month, "_outlier_analysis_prices.pdf"), g, 
+  ggsave(paste0("output/checking/", assessment.month, "_outlier_analysis_prices.pdf"), g, 
          width = 40, height = 40, units = "cm", device="pdf")
 }
 # generate a boxplot for all generic numeric variables highligthing the outliers
@@ -355,7 +355,7 @@ generate.generic.outliers.boxplot <- function(){
     geom_point(aes(x=adm0, y=(as.numeric(value))), 
                alpha=f.alpha(df$detected), colour=f.colour(df$detected)) +
     facet_wrap(~variable, scales="free_y", nrow = ceiling(num_variables/4), ncol = 4)
-  ggsave(paste0(directory.checking, assessment.month, "_outlier_analysis_generic.pdf"), g, 
+  ggsave(paste0("output/checking/", assessment.month, "_outlier_analysis_generic.pdf"), g, 
          width = 40, height = 40, units = "cm", device="pdf")
 }
 
@@ -514,7 +514,7 @@ analysis.boxplot <- function(data, category){
     theme(axis.text.x = element_text(angle = 0, size = 7, hjust = 0.5 ),
           axis.title.x = element_blank(),
           axis.title.y = element_blank())
-  ggsave(paste0(directory.final, assessment.month, "_analysis_boxplot_", category, ".pdf"), 
+  ggsave(paste0("output/analysis/", assessment.month, "_analysis_boxplot_", category, ".pdf"), 
          width=2*num.items, height=12, units="cm", device="pdf")
 }
 # function to calculate basket cost (full or food basket)
@@ -551,7 +551,7 @@ calculate.time.trends <- function(analysis, num.months){
   # load previous analysis to be used as reference in the calculation of the time trend
   this.month.date <- as.Date(paste0(assessment.month, "-01"), "%Y-%m-%d")
   ref.month <- str_sub(seq(this.month.date, length=2, by=paste0("-", num.months, " month"))[2], 1, 7)
-  filename.ref.analysis <- paste0(directory.final, ref.month, "_analysis_InDesign.xlsx")
+  filename.ref.analysis <- paste0("output/analysis/", ref.month, "_analysis_InDesign.xlsx")
   if (!file.exists(filename.ref.analysis)) stop(paste0(filename.ref.analysis, " not found"))
   ref.analysis <- read_excel(filename.ref.analysis, guess_max=20000)
   # determine list of columns in common between the 2 periods -> to be used in the time trends calculation
