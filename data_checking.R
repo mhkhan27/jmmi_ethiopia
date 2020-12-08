@@ -253,7 +253,7 @@ generate.generic.outliers.boxplot()
 # --> inspect the boxplot to visually spot missed outliers or unlikely ranges
 
 ##########################################################################################################
-# Step 11: Produce file with follow-up requests to be sent to partners
+# Step 11: Produce dataframe with follow-up requests to be sent to partners
 ##########################################################################################################
 
 cleaning.log <- rbind(cleaning.log.outliers, cleaning.log.outliers.generic)
