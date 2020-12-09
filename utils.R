@@ -113,7 +113,7 @@ remove.water.responses <- function(uuid){
   cols <- c("truck_capacity", cols)
   cl <- rbind(
     data.frame(uuid=uuid, variable="type_vendor", 
-               new.value=trimws(str_remove(get.value(raw.step1, "uuid", uuid.nok, "type_vendor"), "water"))),
+               new.value=trimws(str_remove(get.value(raw.step1, "uuid", uuid, "type_vendor"), "water"))),
     data.frame(uuid=uuid, variable="type_vendor/water", new.value="0"),
     do.call(rbind, lapply(cols, function(x) data.frame(uuid=uuid, variable=x, new.value=NA))))
   return(cl)
@@ -132,8 +132,6 @@ get.entry.other.changes <- function(uuid, item, standard_unit, nonstandard_unit,
 remove.food.item <- function(df, uuid, item){
   cols <- colnames(df)[str_starts(colnames(df), item)]
   cl <- rbind(
-    data.frame(uuid=uuid, variable="food_sold", 
-               new.value=trimws(str_remove(get.value(df, "uuid", uuid, "food_sold"), item))),
     data.frame(uuid=uuid, variable=paste0("food_sold/", item), new.value="0"),
     do.call(rbind, lapply(cols, function(x) return(data.frame(uuid=uuid, variable=x, new.value=NA)))))
   return(cl)
@@ -183,7 +181,10 @@ calculate_price_per_unit <- function(item, standard_unit, non_standard_unit, uni
     non_standard_unit == "gram" & item == "bleach" ~ price / unit_g * 4,
     non_standard_unit == "gram" & item != "cooking_oil" ~ price / unit_g * 1000,
     non_standard_unit == "millilitre" & item == "cooking_oil" ~ price / unit_ml * 1000,
-    non_standard_unit == "medeb" & item == "vegetables_leafy_darkgreen" ~ price / 0.5,
+    non_standard_unit == "medeb" & item == "vegetables_leafy_darkgreen" ~ price / 0.25,
+    non_standard_unit == "bundle_small" & item == "vegetables_leafy_darkgreen" ~ price / 0.25,
+    non_standard_unit == "galaan" & item %in% c("maize", "sorghum", "wheat") ~ price / 1.15,
+    non_standard_unit == "koombo" & item == "rice" ~ price / 0.6,
     non_standard_unit == "piece" & item == "bath_soap" ~ price,
     non_standard_unit == "piece" & item == "vegetables_leafy_darkgreen" ~ price / 0.5,
     non_standard_unit == "sachet" & item == "bleach" ~ price / 2 * 4,  # sachet of 2 grams

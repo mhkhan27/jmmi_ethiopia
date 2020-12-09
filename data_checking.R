@@ -63,7 +63,7 @@ cl.adm2 <- cl.adm3 %>%
   mutate(variable="adm2_zone", old.value=str_sub(old.value, 1, 6), new.value=str_sub(new.value, 1, 6))
 cl.adm1 <- cl.adm3 %>% 
   mutate(variable="adm1_region", old.value=str_sub(old.value, 1, 4), new.value=str_sub(new.value, 1, 4))
-cl.gps <- rbind(cl.adm1, cl.adm2, cl.adm3)
+cl.gps <- rbind(cl.adm1, cl.adm2, cl.adm3) %>% filter(new.value!=old.value)
 
 # 6) apply changes
 # raw.step1 <- apply.changes(raw, cl.gps)  # <-- uncomment to apply GPS checks
@@ -80,34 +80,47 @@ other <- raw.step1[c("uuid", cols)] %>%
   pivot_longer(cols=all_of(cols), names_to="variable", values_to="old.value") %>% 
   filter(!is.na(old.value))
 
-# --> open 'other' data.frame and manually recode/remove the responses in 'cl.other' below
-cl.other <- rbind(
-  get.entry.other.changes(uuid="c85a6190-052c-437b-aa06-7e46488804c0", item="bath_soap", 
-                          standard_unit="no", nonstandard_unit="piece", 
+# 1) open 'other' data.frame and manually recode/remove the responses in 'cl.other' in the steps below
+
+# 2) handle cases with "Not sell" (i.e. the item was wrongly reported in food_sold)
+# --> update the following code if needed
+other <- other %>% 
+  mutate(not.sell = str_detect(old.value, "Not sell|No meat|No vegetable|No cooking"))
+other$item <- lapply(other$variable, function(x) str_split(x, "_nonstandard")[[1]][1])
+other.not.sell <- filter(other, not.sell)
+cl.other <- data.frame()
+for (u in unique(other.not.sell$uuid)){
+  sub.other <- filter(other.not.sell, uuid==u)
+  sub.cl.other <- do.call(rbind, apply(sub.other, 1, function(x) 
+    remove.food.item(raw.step1, uuid=x["uuid"], item=str_split(x["variable"], "_nonstandard")[[1]][1])))
+  items <- paste0(sub.other$item, collapse = "|")
+  new.value <- str_remove_all(get.value(raw.step1, "uuid", u, "food_sold"), items) %>% 
+    trimws() %>% str_replace_all(., "\\s+", " ")
+  cl.other <- rbind(cl.other, sub.cl.other, data.frame(uuid=u, variable="food_sold", new.value=new.value))
+}
+
+# 3) handle cases where one of the nonstandard units is reported in the "other" response (e.g. medeb)
+# --> manually list all cases
+cl.other <- rbind(cl.other,
+  get.entry.other.changes(uuid="29115845-d2d9-49a3-80e7-977f353a708c", item="vegetables_leafy_darkgreen", 
+                          standard_unit="no", nonstandard_unit="medeb", 
                           nonstandard_unit_g=NA, nonstandard_unit_ml=NA, nonstandard_unit_other=NA),
-  get.entry.other.changes(uuid="cc319a16-54d3-4eea-b758-aadd2b740306", item="bath_soap", 
-                          standard_unit="no", nonstandard_unit="gram", 
-                          nonstandard_unit_g=200, nonstandard_unit_ml=NA, nonstandard_unit_other=NA),
-  get.entry.other.changes(uuid="cc319a16-54d3-4eea-b758-aadd2b740306", item="bleach", 
-                          standard_unit="no", nonstandard_unit="gram", 
-                          nonstandard_unit_g=20, nonstandard_unit_ml=NA, nonstandard_unit_other=NA),
-  remove.food.item(raw.step1, uuid="cf347092-8ccb-42ef-8a93-ff25aaac6c13", item="beef"),
-  get.entry.other.changes(uuid="2facc454-6ad7-4741-b163-a6965ee6f48c", item="bath_soap", 
-                          standard_unit="no", nonstandard_unit="gram", 
-                          nonstandard_unit_g=200, nonstandard_unit_ml=NA, nonstandard_unit_other=NA),
-  get.entry.other.changes(uuid="a0b6aca2-fb2a-4336-9b4e-44d05a8d7d37", item="bath_soap", 
-                          standard_unit="no", nonstandard_unit="gram", 
-                          nonstandard_unit_g=200, nonstandard_unit_ml=NA, nonstandard_unit_other=NA))
-# add old.valus
+  get.entry.other.changes(uuid="903fe44e-95ca-4e6c-80c3-9073a4de1522", item="vegetables_leafy_darkgreen", 
+                          standard_unit="no", nonstandard_unit="medeb", 
+                          nonstandard_unit_g=NA, nonstandard_unit_ml=NA, nonstandard_unit_other=NA))
+
+# 4) add old.value
 cl.other$old.value <- apply(cl.other, 1, function(x) get.value(raw.step1, "uuid", x["uuid"], x["variable"]))
 cl.other <- select(cl.other, uuid, variable, old.value, new.value)
-# keep only required changes
+
+# 5) keep only required changes
 cl.other <- cl.other %>% 
   filter((is.na(old.value) & !is.na(new.value)) |
            (!is.na(old.value) & is.na(new.value)) |
            (!is.na(old.value) & !is.na(new.value) & old.value!=new.value)) %>% 
   mutate(check.id="Recode.other")
-# apply changes
+
+# 6) apply changes
 raw.step1 <- apply.changes(raw.step1, cl.other)
 
 ##########################################################################################################
@@ -145,10 +158,10 @@ raw.step1 <- apply.changes(raw.step1, cl.logical.check1)
 
 # DESCRIPTION: if water is wrongly reported in type_vendor, the "water" sections should be set to NA.
 
-# DETECTION: both truck_capacity and water_price_base are 0
+# DETECTION: water_price_base == 0 and truck_capacity < 100
 
 # find uuid with issues
-uuid.nok <- filter(raw.step1, as.numeric(truck_capacity)==0 & as.numeric(water_price_base)==0)[["uuid"]]
+uuid.nok <- filter(raw.step1, as.numeric(water_price_base)==0 & as.numeric(truck_capacity)<100)[["uuid"]]
 
 # generate cleaning log with the required changes
 cl.logical.check2 <- do.call(rbind, lapply(uuid.nok, function(x) remove.water.responses(x)))
@@ -191,7 +204,7 @@ raw.step1 <- add.price.per.unit(raw.step1, test=T)
 raw.check <- raw.step1[c("uuid", all_of(cols.outliers1))] %>% 
   pivot_longer(cols=all_of(cols.outliers1), names_to="variable", values_to="value") %>% 
   filter(!is.na(value) & as.numeric(value)==-1)
-raw.check$item <- apply(raw.check, 1, function(x) str_split(x["variable"], "_")[[1]][1])
+raw.check$item <- apply(raw.check, 1, function(x) str_split(x["variable"], "_price_per")[[1]][1])
 raw.check$nonstandard_unit <- apply(raw.check, 1, function(x) 
   get.value(raw.step1, "uuid", x["uuid"], paste0(x["item"], "_nonstandard_unit")))
 raw.check$nonstandard_unit_other <- apply(raw.check, 1, function(x) 

@@ -7,12 +7,12 @@ source("./utils.R")
 # PLEASE CHECK THE FOLLOWING PARAMETERS AT EACH ROUND AND UPDATE IF NEEDED
 ##########################################################################################################
 # specify month of the assessment (it is used in the name of the output files)
-assessment.month <- "2020-11"
+assessment.month <- "2020-12"
 # specify URLs and input filenames
 filename.tool <- "resources/ETH_JMMI_Kobo_v2.xlsx"
 filename.email.list <- "resources/2020-07-15_email_list.xlsx"
 filename.sendinblue.api.key <- "./api_key.txt"
-filename.raw.dataset <- "data/20201130_data_submission.xlsx"
+filename.raw.dataset <- "data/20201204_data_submission_betsy_account.xlsx"
 BIRR.to.USD <- 0.026
 
 ##########################################################################################################
@@ -23,6 +23,9 @@ BIRR.to.USD <- 0.026
 tool.survey <- read_excel(filename.tool, sheet="survey") %>% filter(!is.na(name))
 tool.choices <- read_excel(filename.tool, sheet="choices") %>% filter(!is.na(list_name))
 
+# get list of food items, 
+food.items <- tool.choices[tool.choices$list_name=="food_items" & tool.choices$name!="none",]$name
+  
 # get list of all food and hygiene items (excluding water) and their standard units
 all.items <- get.all.items()
 standard.units <- get.list.std.units()
