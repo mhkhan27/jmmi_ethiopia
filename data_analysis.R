@@ -14,29 +14,23 @@ data <- read_excel(paste0("output/editing/", assessment.month, "_dataset_cleaned
 # Step 2: aggregate at woreda level <-- basis for the entire analysis
 ##########################################################################################################
 
-cols <- colnames(data)[!(colnames(data) %in% c("adm3_woreda")) &
+# determine list of columns to aggregate
+cols <- colnames(data)[!(colnames(data) %in% c("adm3_woreda", "truck_capacity", "water_price_base",
+                                               "water_price_5km", "water_price_10km")) &
                          !str_starts(colnames(data), "type_vendor") &
-                         !str_ends(colnames(data), "_standard_unit") &
-                         !str_ends(colnames(data), "_nonstandard_unit") &
-                         !str_ends(colnames(data), "_nonstandard_unit_g") &
-                         !str_ends(colnames(data), "_nonstandard_unit_ml") &
-                         !str_ends(colnames(data), "_price") &
-                         !str_ends(colnames(data), "truck_capacity") &
-                         !str_ends(colnames(data), "water_price_base") &
-                         !str_ends(colnames(data), "water_price_5km") &
-                         !str_ends(colnames(data), "water_price_10km")]
+                         !str_ends(colnames(data), "_standard_unit|_nonstandard_unit") &
+                         !str_ends(colnames(data), "_nonstandard_unit_g|_nonstandard_unit_ml") &
+                         !str_ends(colnames(data), "_price")]
 
+# aggregate each of the selected column at woreda level
 data.woreda <- lapply(cols, function(x){
-  
   # get question type (select_one, select_multiple, integer, etc.)
   if (str_detect(x, "/")) q.type <- "select_multiple"
   else if (x %in% tool.survey$name) q.type <- str_split(as.character(tool.survey[tool.survey$name==x, "type"]), " ")[[1]][1]
   else q.type <- "not found"
   if (!str_detect(x, "/") & q.type=="select_multiple") q.type <- "select_multiple_concat"
-  
   # group_by woreda
   df <- data[c("adm3_woreda", x)] %>% filter(!is.na(!!sym(x))) %>% group_by(adm3_woreda)
-  
   # aggregate based on question type and name
   if (q.type %in% c("select_one", "select_multiple", "integer", "decimal") | str_detect(x, "price_per_unit")){
     if (nrow(df) == 0) return(data.frame(adm3_woreda=unique(data$adm3_woreda)) %>% mutate(!!x := NA))

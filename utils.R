@@ -419,9 +419,15 @@ get.availability <- function(x){
 get.at.least.one <- function(x) if ("1" %in% x) return("1") else return("0")
 # function to analyse select_one variables
 analyse.select_one <- function(df, admin.col, variable){
+  # get list_name and list of possible choices from the tool
+  list.name <- str_split(as.character(tool.survey[tool.survey$name==variable, "type"]), " ")[[1]][2]
+  choices <- tool.choices[tool.choices$list_name==list.name, ]$name
+  # convert column to factor so that the empty choices won't be dropped in the group_by 
+  df[[variable]] <- factor(df[[variable]], levels=choices)
+  # calculate the proportions
   d <- df %>% 
     filter(!is.na(!!sym(variable))) %>% 
-    group_by(!!sym(admin.col), !!sym(variable)) %>%
+    group_by(!!sym(admin.col), !!sym(variable), .drop=F) %>%
     summarise(n = n()) %>% 
     mutate(proportion = n / sum(n)) %>% ungroup() %>% 
     select(-n) %>% 
@@ -458,20 +464,24 @@ analyse.numeric.sum <- function(df, admin.col, variable){
     summarise(!!variable := sum(!!sym(variable)))
   return(d)
 }
-# function to run the analysis on all indicators
+# function to run the analysis on all variables
 run.analysis <- function(data, admin.output){
   indicators <- data.frame(col.name=colnames(data)) %>% 
     filter(!(col.name %in% c("adm1_region", "adm2_zone", "adm3_woreda")))
   indicators$variable <- apply(indicators, 1, function(x) str_split(x, "/")[[1]][1])
   if (admin.output=="adm0_nation") data$adm0_nation="ET"
   r <- lapply(unique(indicators$variable), function(variable){
+    # get variable type
     if (variable %in% tool.survey$name){
       q.type <- str_split(get.value(tool.survey, "name", variable, "type"), " ")[[1]][1]
     } else if (str_detect(variable, "_price_per_unit")) q.type <- "numeric"
     else if (str_detect(variable, "number_prices")) q.type <- "number_prices"
     else stop("Variable unknown")
+    # get all columns that start with variable (> 1 in case of select_multiple)
     cols <- indicators$col.name[str_starts(indicators$col.name, variable)]
+    # keep only relevant column
     df <- data[c(admin.output, all_of(cols))]
+    # analyse the variable based on the variable type
     if (q.type=="select_one") return(analyse.select_one(df, admin.output, variable))
     if (q.type=="select_multiple") return(analyse.select_multiple(df, admin.output, variable))
     if (q.type %in% c("numeric", "integer")) return(analyse.numeric.median(df, admin.output, variable))
