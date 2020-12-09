@@ -115,13 +115,13 @@ write.xlsx(analysis, paste0("output/analysis/", assessment.month, "_analysis_InD
 
 labels <- read_excel("resources/item_labels.xlsx")
 cols <- colnames(data.woreda)[str_detect(colnames(data.woreda), "price_per_unit")]
+cols <- cols[!(cols %in% c("water_5km_price_per_unit", "water_10km_price_per_unit"))]
 data <- data.woreda[cols] %>% 
   pivot_longer(cols=all_of(cols), names_to="item", values_to="price_per_unit") %>% 
   filter(!is.na(price_per_unit)) %>% left_join(labels, by="item") %>% 
   mutate(item=paste0(label, "\n(", unit, ")")) %>% select(-c("label", "unit")) %>% 
   mutate(category=case_when(
     str_detect(item, "Beef|Goat|Mutton") ~ "meat_items",
-    str_detect(item, "Water") ~ "water_items",
     TRUE ~ "other_items"))
 
 # one boxplot with all items

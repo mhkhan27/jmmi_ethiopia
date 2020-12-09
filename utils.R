@@ -488,7 +488,7 @@ analysis.boxplot <- function(data, category){
     return(r)
   }
   get.number.label <- function(item, value){
-    rounding <- ifelse(str_starts(item, "Water"), 2, 0)
+    rounding <- ifelse(str_starts(item, "Water|Bleach"), 2, 0)
     df <- data.frame(value=value, rounding=rounding)
     return(apply(df, 1, function(x) 
       return(str_pad(format(x["value"], digits=x["rounding"]), width=3, side="left"))))
