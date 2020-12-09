@@ -493,11 +493,11 @@ analysis.boxplot <- function(data, category){
     return(apply(df, 1, function(x) 
       return(str_pad(format(x["value"], digits=x["rounding"]), width=3, side="left"))))
   }
-  
+  # calculate median, min and max for each price_per_unit
   medians <- plyr::ddply(data, "item", summarise, med = median(price_per_unit, na.rm=T))
   mins <- plyr::ddply(data, "item", summarise, min = min(price_per_unit, na.rm=T))
   maxs <- plyr::ddply(data, "item", summarise, max = max(price_per_unit, na.rm=T))
-  
+  # generate and save boxplot
   num.items <- length(unique(data$item))
   p <- ggplot(data=data, aes(x=reorder(item, -price_per_unit, median), y=price_per_unit, width=0.3)) +
     stat_summary(fun.data = boxplot_statistics, geom="boxplot", fill = "#D1D3D4") +
@@ -517,28 +517,106 @@ analysis.boxplot <- function(data, category){
   ggsave(paste0("output/analysis/", assessment.month, "_analysis_boxplot_", category, ".pdf"), 
          width=2*num.items, height=12, units="cm", device="pdf")
 }
-# function to calculate basket cost (full or food basket)
-calculate.basket.cost <- function(df, type){
-  if (!(type %in% c("full", "food"))) stop("Type of basket is unknown")
-  is.full <- ifelse(type=="full", 1, 0)
-  col.name <- ifelse(type=="full", "full.basket.cost", "food.basket.cost")
-  df <- df %>% 
-    mutate(!!col.name := 
-             1 * maize_price_per_unit +
-             1 * sorghum_price_per_unit +
-             1 * teff_price_per_unit +
-             1 * wheat_price_per_unit +
-             1 * barley_price_per_unit +
-             1 * enset_price_per_unit +
-             1 * rice_price_per_unit +
-             1 * beef_price_per_unit +
-             1 * mutton_price_per_unit +
-             1 * goat_meat_price_per_unit +
-             1 * vegetables_leafy_darkgreen_price_per_unit +
-             1 * cooking_oil_price_per_unit +
-             is.full * 1 * bath_soap_price_per_unit +
-             is.full * 1 * bleach_price_per_unit + 
-             is.full * 1000 * water_price_per_unit)
+# function to get the quantities of cereals consumed by an individual per day depending on the pcode
+get.cereals.quantities <- function(pcode){
+  cereals.per.person <- 0.4  # 0.4 kilogram
+  q <- list()
+  # at nation-level -> distribute the 400 gram equally between the 7 types of cereals
+  # at region-level -> distribute the 400 gram equally between the 4 types of cereals available in each region
+  if (pcode=="ET") {
+    q$maize = q$sorghum = q$teff = q$wheat = q$barley = q$enset = q$rice <- cereals.per.person/7
+  } else if (str_starts(pcode, "ET01|ET03|ET04|ET06|ET12|ET13|ET14|ET15")){
+    q$maize = q$sorghum = q$teff = q$wheat <- cereals.per.person/4
+    q$rice = q$enset = q$barley <- 0
+  } else if (str_starts(pcode, "ET02")){
+    q$barley = q$maize = q$sorghum = q$teff <- cereals.per.person/4
+    q$rice = q$enset = q$wheat <- 0
+  } else if (str_starts(pcode, "ET07|ET16")){
+    q$barley = q$enset = q$maize = q$teff <- cereals.per.person/4
+    q$rice = q$wheat = q$sorghum <- 0
+  } else if (str_starts(pcode, "ET05")){
+    q$maize = q$rice = q$sorghum = q$wheat <- cereals.per.person/4
+    q$enset = q$barley = q$teff <- 0
+  } else stop("Region unknown.")
+  return(q)
+}
+# function to get the number of missing items for each row of the analysis dataframe
+get.basket.number.missing.items <- function(x, basket.type){
+  if (x["admin.pcode"]=="ET"){
+    n <- sum(is.na(x[c("maize_price_per_unit", "sorghum_price_per_unit", "teff_price_per_unit",
+                       "wheat_price_per_unit", "barley_price_per_unit", "enset_price_per_unit",
+                       "rice_price_per_unit")]))
+  } else if (str_starts(x["admin.pcode"], "ET01|ET03|ET04|ET06|ET12|ET13|ET14|ET15")){
+    n <- sum(is.na(x[c("maize_price_per_unit", "sorghum_price_per_unit", "teff_price_per_unit",
+                       "wheat_price_per_unit")]))
+  } else if (str_starts(x["admin.pcode"], "ET02")){
+    n <- sum(is.na(x[c("maize_price_per_unit", "sorghum_price_per_unit", "teff_price_per_unit",
+                       "barley_price_per_unit")]))
+  } else if (str_starts(x["admin.pcode"], "ET07|ET16")){
+    n <- sum(is.na(x[c("maize_price_per_unit", "teff_price_per_unit", "barley_price_per_unit",
+                       "enset_price_per_unit")]))
+  } else if (str_starts(x["admin.pcode"], "ET05")){
+    n <- sum(is.na(x[c("maize_price_per_unit", "sorghum_price_per_unit", "wheat_price_per_unit",
+                       "rice_price_per_unit")]))
+  }
+  n <- n + sum(is.na(x[c("beef_price_per_unit", "mutton_price_per_unit", "goat_meat_price_per_unit",
+                         "vegetables_leafy_darkgreen_price_per_unit", "cooking_oil_price_per_unit")]))
+  if (basket.type=="full") n <- n + sum(
+    is.na(x[c("bath_soap_price_per_unit", "bleach_price_per_unit", "water_price_per_unit")])
+  )
+  return(n)
+}
+# function to impute the price_per_unit when it is not available
+# - methodology: use the price of the first available higher admin
+# - e.g. for a woreda, take the price of its zone if available, otherwise region, otherwise nation
+impute.prices <- function(df){
+  # ensure that sorting of df$admin.level is the one this function is designed for
+  df.sorted <- arrange(df, match(admin.level, c("Nation", "Region", "Zone", "Woreda")))
+  if (!identical(df, df.sorted)) stop("Sorting of input dataframe is not correct.")
+  for (r in 1:nrow(df)){
+    for (c in colnames(df)[str_ends(colnames(df), "_price_per_unit")]){
+      admin.level <- as.character(df[r, "admin.level"])
+      admin.pcode <- as.character(df[r, "admin.pcode"])
+      if (admin.level!="Nation" & is.na(df[r, c])){
+        df[r, c] <- case_when(
+          admin.level=="Region" ~ as.numeric(df[df$admin.pcode=="ET", c]),
+          admin.level=="Zone" ~ as.numeric(df[df$admin.pcode==str_sub(admin.pcode, 1, 4), c]),
+          admin.level=="Woreda" ~ as.numeric(df[df$admin.pcode==str_sub(admin.pcode, 1, 6), c]))
+      }
+    }
+  }
+  return(df)
+}
+# function to calculate and add basket cost (full or food basket) to the analysis dataframe
+add.basket.cost <- function(df, basket.type){
+  # sort df based on the admin.level column: this is required for the function impute.prices()
+  df <- arrange(df, match(admin.level, c("Nation", "Region", "Zone", "Woreda")))
+  # check that the basket.type is supported
+  if (!(basket.type %in% c("full", "food"))) stop("Type of basket is unknown")
+  # add column with number of missing items in the basket
+  col.name <- ifelse(basket.type=="full", "full.basket.missing.items", "food.basket.missing.items")
+  df[[col.name]] <- apply(df, 1, function(x) get.basket.number.missing.items(x, basket.type))
+  # add column with basket cost
+  HH.size <- 6
+  days.month <- 30
+  col.name <- ifelse(basket.type=="full", "full.basket.cost", "food.basket.cost")
+  df[[col.name]] <- apply(impute.prices(df), 1, function(x){
+    q <- get.cereals.quantities(x["admin.pcode"])
+    ifelse(q$maize==0, 0, q$maize * HH.size * days.month * as.numeric(x["maize_price_per_unit"])) +
+      ifelse(q$sorghum==0, 0, q$sorghum * HH.size * days.month * as.numeric(x["sorghum_price_per_unit"])) +
+      ifelse(q$teff==0, 0, q$teff * HH.size * days.month * as.numeric(x["teff_price_per_unit"])) +
+      ifelse(q$wheat==0, 0, q$wheat * HH.size * days.month * as.numeric(x["wheat_price_per_unit"])) +
+      ifelse(q$barley==0, 0, q$barley * HH.size * days.month * as.numeric(x["barley_price_per_unit"])) +
+      ifelse(q$enset==0, 0, q$enset * HH.size * days.month * as.numeric(x["enset_price_per_unit"])) +
+      ifelse(q$rice==0, 0, q$rice * HH.size * days.month * as.numeric(x["rice_price_per_unit"])) +
+      0.005 * HH.size * days.month * as.numeric(x["beef_price_per_unit"]) +
+      0.005 * HH.size * days.month * as.numeric(x["mutton_price_per_unit"]) +
+      0.005 * HH.size * days.month * as.numeric(x["goat_meat_price_per_unit"]) +
+      0.1 * HH.size * days.month * as.numeric(x["vegetables_leafy_darkgreen_price_per_unit"]) +
+      0.03 * HH.size * days.month * as.numeric(x["cooking_oil_price_per_unit"]) +
+      ifelse(basket.type=="full", 3 * as.numeric(x["bath_soap_price_per_unit"]), 0) +
+      ifelse(basket.type=="full", 32 * as.numeric(x["bleach_price_per_unit"]), 0) + 
+      ifelse(basket.type=="full", 15 * HH.size * days.month * as.numeric(x["water_price_per_unit"]), 0)})
   return(df)
 }
 # function to get the list of columns containing prices and basket costs

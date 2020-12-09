@@ -74,7 +74,7 @@ analysis.zone <- run.analysis(data.woreda, "adm2_zone")
 analysis.region <- run.analysis(data.woreda, "adm1_region")
 analysis.national <- run.analysis(data.woreda, "adm0_nation")
 
-# combine analysis and add names
+# combine analysis of the 4 admin levels and add admin names
 analysis <- rbind(analysis.national, analysis.region, analysis.zone, analysis.woreda) %>%
   mutate(admin.level=case_when(
     str_length(admin)==2 ~ "Nation",
@@ -88,8 +88,8 @@ analysis <- rbind(analysis.national, analysis.region, analysis.zone, analysis.wo
   relocate(admin.name, .after="admin.pcode")
 
 # add JMMI basket cost
-analysis <- calculate.basket.cost(analysis, "full")
-analysis <- calculate.basket.cost(analysis, "food")
+analysis <- add.basket.cost(analysis, "full")
+analysis <- add.basket.cost(analysis, "food")
 
 # add prices in USD
 df <- analysis[get.columns.prices.baskets(analysis)] / USD.to.BIRR
