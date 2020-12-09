@@ -92,7 +92,7 @@ analysis <- calculate.basket.cost(analysis, "full")
 analysis <- calculate.basket.cost(analysis, "food")
 
 # add prices in USD
-df <- analysis[get.columns.prices.baskets(analysis)] * BIRR.to.USD
+df <- analysis[get.columns.prices.baskets(analysis)] / USD.to.BIRR
 colnames(df) <- as.character(lapply(colnames(df), function(x) paste0(x, ".USD")))
 analysis <- cbind(analysis, df)
 

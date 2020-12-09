@@ -13,7 +13,8 @@ filename.tool <- "resources/ETH_JMMI_Kobo_v2.xlsx"
 filename.email.list <- "resources/2020-07-15_email_list.xlsx"
 filename.sendinblue.api.key <- "./api_key.txt"
 filename.raw.dataset <- "data/20201130_data_submission.xlsx"
-BIRR.to.USD <- 0.026
+# https://treasury.un.org/operationalrates/OperationalRates.php
+USD.to.BIRR <- 37.925
 
 ##########################################################################################################
 # LOAD TOOL AND GENERATE VARIABLES BASED ON TOOL
