@@ -420,8 +420,11 @@ get.at.least.one <- function(x) if ("1" %in% x) return("1") else return("0")
 # function to analyse select_one variables
 analyse.select_one <- function(df, admin.col, variable){
   # get list_name and list of possible choices from the tool
-  list.name <- str_split(as.character(tool.survey[tool.survey$name==variable, "type"]), " ")[[1]][2]
-  choices <- tool.choices[tool.choices$list_name==list.name, ]$name
+  if (str_starts(variable, "availability_")) choices <- c("available", "limited", "unavailable", "no data")
+  else {
+    list.name <- str_split(as.character(tool.survey[tool.survey$name==variable, "type"]), " ")[[1]][2]
+    choices <- tool.choices[tool.choices$list_name==list.name, ]$name
+  }
   # convert column to factor so that the empty choices won't be dropped in the group_by 
   df[[variable]] <- factor(df[[variable]], levels=choices)
   # calculate the proportions
