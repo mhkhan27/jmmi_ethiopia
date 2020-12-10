@@ -517,7 +517,7 @@ analysis.boxplot <- function(data, category){
               size=2.5, vjust=1.5) +
     geom_text(data=medians, 
               aes(x=item, y=med, label=get.number.label(item, med)),
-              size=2.5, hjust = ifelse(num.items < 5, -.7, -1)) +
+              size=2.5, hjust = ifelse(num.items < 5, -.9, -1.1)) +
     geom_text(data=maxs, 
               aes(x=item, y=max, label=get.number.label(item, max)),
               size=2.5, vjust =-0.5) +
@@ -525,7 +525,7 @@ analysis.boxplot <- function(data, category){
           axis.title.x = element_blank(),
           axis.title.y = element_blank())
   ggsave(paste0("output/analysis/", assessment.month, "_analysis_boxplot_", category, ".pdf"), 
-         width=2*num.items, height=12, units="cm", device="pdf")
+         width=2.2*num.items, height=12, units="cm", device="pdf")
 }
 # function to get the quantities of cereals consumed by an individual per day depending on the pcode
 get.cereals.quantities <- function(pcode){
