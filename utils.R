@@ -623,7 +623,7 @@ add.basket.cost <- function(df, basket.type){
       0.005 * HH.size * days.month * as.numeric(x["mutton_price_per_unit"]) +
       0.005 * HH.size * days.month * as.numeric(x["goat_meat_price_per_unit"]) +
       0.1 * HH.size * days.month * as.numeric(x["vegetables_leafy_darkgreen_price_per_unit"]) +
-      0.03 * HH.size * days.month * as.numeric(x["cooking_oil_price_per_unit"]) +
+      (0.03 / 0.921) * HH.size * days.month * as.numeric(x["cooking_oil_price_per_unit"]) +
       ifelse(basket.type=="full", 3 * as.numeric(x["bath_soap_price_per_unit"]), 0) +
       ifelse(basket.type=="full", 32 * as.numeric(x["bleach_price_per_unit"]), 0) + 
       ifelse(basket.type=="full", 15 * HH.size * days.month * as.numeric(x["water_price_per_unit"]), 0)})
