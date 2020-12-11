@@ -1,5 +1,5 @@
 if (!require("pacman")) install.packages("pacman")
-pacman::p_load(tidyverse, readxl, writexl, openxlsx, httr, randomcoloR, anytime, sf, leaflet, mapview)
+pacman::p_load(tidyverse, readxl, writexl, openxlsx, httr, randomcoloR, anytime, sf, leaflet, mapview, extrafont)
 
 source("./utils.R")
 
@@ -14,7 +14,7 @@ filename.email.list <- "resources/2020-07-15_email_list.xlsx"
 filename.sendinblue.api.key <- "./api_key.txt"
 filename.raw.dataset <- "data/20201130_data_submission.xlsx"
 # https://treasury.un.org/operationalrates/OperationalRates.php
-USD.to.BIRR <- 37.925
+USD.to.ETB <- 37.925
 
 ##########################################################################################################
 # LOAD TOOL AND GENERATE VARIABLES BASED ON TOOL

@@ -512,23 +512,24 @@ analysis.boxplot <- function(data, category){
   maxs <- plyr::ddply(data, "item", summarise, max = max(price_per_unit, na.rm=T))
   # generate and save boxplot
   num.items <- length(unique(data$item))
-  p <- ggplot(data=data, aes(x=reorder(item, -price_per_unit, median), y=price_per_unit, width=0.3)) +
+  p <- ggplot(data=data, aes(x=reorder(item, -price_per_unit, median), y=price_per_unit, width=0.4)) +
     stat_summary(fun.data = boxplot_statistics, geom="boxplot", fill = "#D1D3D4") +
     theme_bw() + 
     geom_text(data=mins, 
               aes(x=item, y=min, label=get.number.label(item, min)),
-              size=2.5, vjust=1.5) +
+              size=3.5, vjust=1.5) +
     geom_text(data=medians, 
               aes(x=item, y=med, label=get.number.label(item, med)),
-              size=2.5, hjust = ifelse(num.items < 5, -.9, -1.1)) +
+              size=3.5, hjust = ifelse(num.items < 5, -1.1, -1.3)) +
     geom_text(data=maxs, 
               aes(x=item, y=max, label=get.number.label(item, max)),
-              size=2.5, vjust =-0.5) +
-    theme(axis.text.x = element_text(angle = 0, size = 7, hjust = 0.5 ),
+              size=3.5, vjust =-0.5) +
+    theme(axis.text.x = element_text(angle = 0, size = 10, hjust = 0.5),
+          axis.text.y = element_text(size = 10),
           axis.title.x = element_blank(),
           axis.title.y = element_blank())
   ggsave(paste0("output/analysis/", assessment.month, "_analysis_boxplot_", category, ".pdf"), 
-         width=2.2*num.items, height=12, units="cm", device="pdf")
+         width=2.5*num.items, height=12, units="cm", device=cairo_pdf, family="Arial Narrow")
 }
 # function to get the quantities of cereals consumed by an individual per day depending on the pcode
 get.cereals.quantities <- function(pcode){
@@ -671,4 +672,40 @@ calculate.summary.columns <- function(data, data.partners, admin.level){
               summary.number.commodities.assessed = number.commodities.accessed) %>% 
     rename(admin.pcode=!!sym(admin.level))
   return(res)
+}
+# function to save XLSX file with tool, dataset, analysis, etc. to be published
+save.final.xlsx <- function(){
+  wb <- createWorkbook()
+  
+  addWorksheet(wb, "Dataset")
+  writeData(wb = wb, x = data, sheet = "Dataset", startRow = 1)
+  setColWidths(wb, "Dataset", cols=1:ncol(data), widths="auto")
+  
+  addWorksheet(wb, "Median prices")
+  df <- analysis %>% 
+    select("admin.level", "admin.pcode", "admin.name",
+           colnames(analysis)[str_detect(colnames(analysis), "_price_per_unit")])
+  writeData(wb = wb, x = df, sheet = "Median prices", startRow = 1)
+  setColWidths(wb, "Median prices", cols=1:ncol(df), widths="auto")
+  
+  addWorksheet(wb, "Median JMMI basket cost")
+  df <- analysis %>% 
+    select("admin.level", "admin.pcode", "admin.name",
+           "full.basket.cost", "food.basket.cost",
+           "full.basket.cost.USD", "food.basket.cost.USD")
+  writeData(wb = wb, x = df, sheet = "Median JMMI basket cost", startRow = 1)
+  setColWidths(wb, "Median JMMI basket cost", cols=1:ncol(df), widths="auto")
+  
+  addWorksheet(wb, "JMMI basket composition")
+  df <- read_excel("resources/JMMI_basket_composition.xlsx")
+  writeData(wb = wb, x = df, sheet = "JMMI basket composition", startRow = 1)
+  setColWidths(wb, "JMMI basket composition", cols=1:ncol(df), widths="auto")
+  addWorksheet(wb, "Kobo.survey")
+  writeData(wb = wb, x = tool.survey, sheet = "Kobo.survey", startRow = 1)
+  setColWidths(wb, "Kobo.survey", cols=1:ncol(tool.survey), widths=25)
+  addWorksheet(wb, "Kobo.choices")
+  writeData(wb = wb, x = tool.choices, sheet = "Kobo.choices", startRow = 1)
+  setColWidths(wb, "Kobo.choices", cols=1:ncol(tool.choices), widths=25)
+  
+  saveWorkbook(wb, paste0("output/analysis/", assessment.month, "_ETH_JMMI_dataset.xlsx"), overwrite = TRUE)
 }

@@ -86,7 +86,7 @@ analysis <- add.basket.cost(analysis, "full")
 analysis <- add.basket.cost(analysis, "food")
 
 # add prices in USD
-df <- analysis[get.columns.prices.baskets(analysis)] / USD.to.BIRR
+df <- analysis[get.columns.prices.baskets(analysis)] / USD.to.ETB
 colnames(df) <- as.character(lapply(colnames(df), function(x) paste0(x, ".USD")))
 analysis <- cbind(analysis, df)
 
@@ -110,7 +110,7 @@ write.xlsx(analysis, paste0("output/analysis/", assessment.month, "_analysis_InD
 labels <- read_excel("resources/item_labels.xlsx")
 cols <- colnames(data.woreda)[str_detect(colnames(data.woreda), "price_per_unit")]
 cols <- cols[!(cols %in% c("water_5km_price_per_unit", "water_10km_price_per_unit"))]
-data <- data.woreda[cols] %>% 
+data.boxplot <- data.woreda[cols] %>% 
   pivot_longer(cols=all_of(cols), names_to="item", values_to="price_per_unit") %>% 
   filter(!is.na(price_per_unit)) %>% left_join(labels, by="item") %>% 
   mutate(item=paste0(label, "\n(", unit, ")")) %>% select(-c("label", "unit")) %>% 
@@ -119,11 +119,15 @@ data <- data.woreda[cols] %>%
     str_detect(item, "Bath soap|Bleach|Water") ~ "hygiene_items",
     TRUE ~ "food_other_items"))
 
+# the following lines are required to be able to choose the font in the boxplot
+font_import()
+loadfonts()
+
 # one boxplot with all items
-analysis.boxplot(data, "all_items")
+analysis.boxplot(data.boxplot, "all_items")
 
 # one boxplot for each category (meat_items, water_items, other_items)
-t <- data %>% group_by(category) %>% group_map(~analysis.boxplot(.x,.y))
+t <- data.boxplot %>% group_by(category) %>% group_map(~analysis.boxplot(.x,.y))
 
 ##########################################################################################################
 # Step 5: generate CSV file for the coverage map
@@ -132,4 +136,10 @@ t <- data %>% group_by(category) %>% group_map(~analysis.boxplot(.x,.y))
 df <- analysis %>% filter(admin.level=="Woreda") %>% 
   select("admin.pcode") %>% rename(assessed_woreda=admin.pcode)
 write_csv(df, paste0("output/analysis/", assessment.month, "_assessed_woreda_GIS.csv"))
+
+##########################################################################################################
+# Step 6: generate XLSX file with tool, dataset, analysis, etc. to be published
+##########################################################################################################
+
+save.final.xlsx()
 
