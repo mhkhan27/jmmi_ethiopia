@@ -1,0 +1,7 @@
+*
+!.gitignore
+!analysis/
+!checking/
+!editing/
+!fu_requests/
+!fu_responses/
