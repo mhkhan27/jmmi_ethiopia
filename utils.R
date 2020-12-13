@@ -183,8 +183,8 @@ calculate_price_per_unit <- function(item, standard_unit, non_standard_unit, uni
     non_standard_unit == "millilitre" & item == "cooking_oil" ~ price / unit_ml * 1000,
     non_standard_unit == "medeb" & item == "vegetables_leafy_darkgreen" ~ price / 0.25,
     non_standard_unit == "bundle_small" & item == "vegetables_leafy_darkgreen" ~ price / 0.25,
-    non_standard_unit == "galaan" & item %in% c("maize", "sorghum", "wheat") ~ price / 1.15,
-    non_standard_unit == "koombo" & item == "rice" ~ price / 0.6,
+    non_standard_unit == "galaan" & item %in% c("maize", "sorghum", "wheat", "rice") ~ price / 1.15,
+    non_standard_unit == "koombo" & item %in% c("rice", "maize") ~ price / 0.6,
     non_standard_unit == "piece" & item == "bath_soap" ~ price,
     non_standard_unit == "piece" & item == "vegetables_leafy_darkgreen" ~ price / 0.5,
     non_standard_unit == "sachet" & item == "bleach" ~ price / 2 * 4,  # sachet of 2 grams

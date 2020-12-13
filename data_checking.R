@@ -49,7 +49,7 @@ m <- leaflet() %>%
   addCircleMarkers(data = survey.points, radius=5, color = "#FF00FF", stroke=F, fillOpacity = 0.5, 
                    label = paste0(survey.points$partner, "_", survey.points$adm3_woreda)) %>% 
   addTiles()
-mapshot(m, file=paste0("output/checking/", assessment.month, "_map_samples.pdf"))  # <-- takes 1 minute
+mapshot(m, file=paste0("output/checking/", assessment.month, "_map_samples.pdf"))  # <-- takes 2/3 minutes
 
 # 4) check that reported woreda is within the woreda polygon
 raw.check <- st_drop_geometry(survey.points) %>% 
@@ -80,7 +80,7 @@ other <- raw.step1[c("uuid", cols)] %>%
   pivot_longer(cols=all_of(cols), names_to="variable", values_to="old.value") %>% 
   filter(!is.na(old.value))
 
-# 1) open 'other' data.frame and manually recode/remove the responses in 'cl.other' in the steps below
+# 1) open 'other' data.frame and manually recode/remove the responses in 'cl.other' in steps 2) and 3) below
 
 # 2) handle cases with "Not sell" (i.e. the item was wrongly reported in food_sold)
 # --> update the following code if needed
@@ -211,6 +211,8 @@ raw.check$nonstandard_unit_other <- apply(raw.check, 1, function(x)
   get.value(raw.step1, "uuid", x["uuid"], paste0(x["item"], "_nonstandard_unit_other")))
 raw.check <- arrange(raw.check, item, nonstandard_unit, nonstandard_unit_other)
 if (nrow(raw.check) > 0) stop(paste0(nrow(raw.check)," units were not converted. Edit calculate_price_per_unit function if needed."))
+# --> inspect raw.check in case of error in the previous line
+# --> all entries in raw.check will result in a price_per_unit = NA
 # 3) run with test=F to get correct prices per unit
 raw.step1 <- add.price.per.unit(raw.step1, test=F)
 # 4) test price per unit calculations --> open res and inspect results
