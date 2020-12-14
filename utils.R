@@ -183,8 +183,8 @@ calculate_price_per_unit <- function(item, standard_unit, non_standard_unit, uni
     non_standard_unit == "millilitre" & item == "cooking_oil" ~ price / unit_ml * 1000,
     non_standard_unit == "medeb" & item == "vegetables_leafy_darkgreen" ~ price / 0.25,
     non_standard_unit == "bundle_small" & item == "vegetables_leafy_darkgreen" ~ price / 0.25,
-    non_standard_unit == "galaan" & item %in% c("maize", "sorghum", "wheat") ~ price / 1.15,
-    non_standard_unit == "koombo" & item == "rice" ~ price / 0.6,
+    non_standard_unit == "galaan" & item %in% c("maize", "sorghum", "wheat", "rice") ~ price / 1.15,
+    non_standard_unit == "koombo" & item %in% c("rice", "maize") ~ price / 0.6,
     non_standard_unit == "piece" & item == "bath_soap" ~ price,
     non_standard_unit == "piece" & item == "vegetables_leafy_darkgreen" ~ price / 0.5,
     non_standard_unit == "sachet" & item == "bleach" ~ price / 2 * 4,  # sachet of 2 grams
@@ -283,7 +283,7 @@ create.outliers.cleaning.log <- function(outliers){
     else if (variable=="water_10km_price_per_unit") price.variable <- "water_price_10km"
     else price.variable <- paste0(item, "_price")
     # get reported unit and quantity
-    if (item=="water"){
+    if (item %in% c("water", "water_5km", "water_10km")){
       unit <- "litre (truck capacity)"
       quantity <- get.value(raw.step1, "uuid", uuid, "truck_capacity")
     } else{
@@ -371,9 +371,13 @@ get.entry.log <- function(uuid, item, std.unit, nstd.unit, nstd.unit.g, nstd.uni
                data.frame(uuid=uuid, variable=paste0(item, "_nonstandard_unit_other"), new.value=NA),
                data.frame(uuid=uuid, variable=paste0(item, "_price"), new.value=price)))
 }
-get.entry.log.water <- function(uuid, quantity, price){
+get.entry.log.water <- function(uuid, item, quantity, price){
+  variable.water.price <- case_when(
+    item=="water" ~ "water_price_base",
+    item=="water_5km" ~ "water_price_5km",
+    item=="water_10km" ~ "water_price_10km")
   return(rbind(data.frame(uuid=uuid, variable="truck_capacity", new.value=quantity),
-               data.frame(uuid=uuid, variable="water_price_base", new.value=price)))
+               data.frame(uuid=uuid, variable=variable.water.price, new.value=price)))
 }
 get.cleaning.log <- function(x, y){
   uuid <- as.character(y$uuid)
@@ -391,8 +395,8 @@ get.cleaning.log <- function(x, y){
     # all new values are NAs -> remove price
     cl <- rbind(cl, get.entry.log(uuid, item, NA, NA, NA, NA, NA))
   } else if (quantity.old!=quantity.new | unit.old!=unit.new | price.old!=price.new){
-    if (item=="water"){
-      cl <- rbind(cl, get.entry.log.water(uuid, item, "no", "gram", quantity.new, NA, price.new))
+    if (item %in% c("water", "water_5km", "water_10km")){
+      cl <- rbind(cl, get.entry.log.water(uuid, item, quantity.new, price.new))
     } else if (unit.new=="gram"){
       cl <- rbind(cl, get.entry.log(uuid, item, "no", "gram", quantity.new, NA, price.new))
     } else if (unit.new=="millilitre"){
