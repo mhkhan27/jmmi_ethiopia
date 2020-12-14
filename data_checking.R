@@ -231,8 +231,11 @@ outliers.sub2 <- raw.step1 %>%
   detect.outliers(., method="sd-log", n.sd=3)
 outliers.sub3 <- raw.step1 %>% 
   select("uuid", all_of(cols.outliers1)) %>% 
+  detect.outliers(., method="iqr-linear")
+outliers.sub4 <- raw.step1 %>% 
+  select("uuid", all_of(cols.outliers1)) %>% 
   detect.outliers(., method="iqr-log")
-outliers <- rbind(outliers.sub1, outliers.sub2, outliers.sub3)
+outliers <- rbind(outliers.sub1, outliers.sub2, outliers.sub3, outliers.sub4)
 outliers <- outliers %>% mutate(mid=paste0(uuid, variable))
 outliers <- outliers[!duplicated(outliers$mid),] %>% select(-mid)
 
