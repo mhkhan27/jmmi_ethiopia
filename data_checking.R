@@ -1,14 +1,30 @@
+rm(list = ls())
 # set wd to this script's locations
-setwd(dirname(rstudioapi::getActiveDocumentContext()$path))
+#setwd(dirname(rstudioapi::getActiveDocumentContext()$path))
 
 # load configuration script (libraries, functions, directories, tool, etc.)  <-- update at each round
 source("./config.R")
 
 ##########################################################################################################
+# Step 0: compile and write dataset
+##########################################################################################################
+raw_from_betsy <- read_excel("data/20201215_data_submission_from_betsy.xlsx", sheet=1, col_types = "text") %>% rename(uuid="_uuid")
+raw_from_chris <- read_excel("data/20201215_data_submission_from_chris.xlsx", sheet=1, col_types = "text") %>% rename(uuid="_uuid")
+
+
+raw_from_chris <- raw_from_chris %>% select(names(raw_from_betsy))
+
+names(raw_from_betsy) %in% names(raw_from_chris) %>% AMR::freq()
+names(raw_from_chris) %in% names(raw_from_betsy) %>% AMR::freq()
+
+raw <- raw_from_betsy %>% bind_rows(raw_from_chris)
+
+
+##########################################################################################################
 # Step 1: load dataset
 ##########################################################################################################
 
-raw <- read_excel(filename.raw.dataset, sheet=1, col_types = "text") %>% rename(uuid="_uuid")
+#raw <- read_excel(filename.raw.dataset, sheet=1, col_types = "text") %>% rename(uuid="_uuid")
 
 ##########################################################################################################
 # Step 2: check for duplicates and short survey duration --> triggers an error
@@ -85,7 +101,7 @@ other <- raw.step1[c("uuid", cols)] %>%
 # 2) handle cases with "Not sell" (i.e. the item was wrongly reported in food_sold)
 # --> update the following code if needed
 other <- other %>% 
-  mutate(not.sell = str_detect(old.value, "Not sell|No meat|No vegetable|No cooking"))
+  mutate(not.sell = str_detect(old.value, "Not sell|No meat|No vegetable|No cooking|Don't sell beef"))
 other$item <- lapply(other$variable, function(x) str_split(x, "_nonstandard")[[1]][1])
 other.not.sell <- filter(other, not.sell)
 cl.other <- data.frame()

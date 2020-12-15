@@ -190,9 +190,26 @@ calculate_price_per_unit <- function(item, standard_unit, non_standard_unit, uni
     non_standard_unit == "sachet" & item == "bleach" ~ price / 2 * 4,  # sachet of 2 grams
     non_standard_unit == "bundle_large" & item == "enset" ~ price / 10,  # bundle_large = 10 kg
     non_standard_unit == "cup_glass" & item == "cooking_oil" ~ price / 250 * 1000,
+    
+    #non_standard_unit == "sachet" & item == "bath_soap" ~ price /2* 125 ,
+    #non_standard_unit == "medeb" & item == "beef" ~ price /0.25 ,
+    non_standard_unit == "millilitre" & item == "bleach" ~ price /unit_ml*4 ,
+    #non_standard_unit == "omo" & item == "bleach" ~ price / ,
+    #non_standard_unit == "butule" & item == "cooking_oil" ~ price / ,
+    #non_standard_unit == "casriile" & item == "cooking_oil" ~ price / ,
+    non_standard_unit == "bundle_small" & item == "enset" ~ price /0.25 ,
+    non_standard_unit == "medeb" & item == "enset" ~ price /0.25 ,
+    #non_standard_unit == "medeb" & item == "goat_meat" ~ price /0.25 ,
+    non_standard_unit == "cup_glass" & item == "maize" ~ price /165*1000 ,
+    #non_standard_unit == "tin" & item == "maize" ~ price / ,
+    #non_standard_unit == "xariiro" & item == "maize" ~ price / ,
+    non_standard_unit == "cup_glass" & item == "sorghum" ~ price/130*100,
+    #non_standard_unit == "tin" & item == "sorghum" ~ price / ,
+    #non_standard_unit == "tassa" & item == "teff" ~ price /,
     !is.na(standard_unit) & test ~ -1,
     TRUE ~ NA_real_)
-}
+  }
+
 # function to calculate price_per_unit for all items in the tool
 add.price.per.unit <- function(df, test=F){
   for (item in all.items){
@@ -273,7 +290,8 @@ detect.outliers <- function(df, method="sd", n.sd=3){
 create.outliers.cleaning.log <- function(outliers){
   cleaning.log.outliers <- data.frame()
   for (r in 1:nrow(outliers)){
-    uuid <- as.character(outliers[r, "uuid"])
+    #uuid <- as.character(outliers[r, "uuid"])
+    uuid <- outliers[r,]$uuid %>% as.character()
     variable <- as.character(outliers[r, "variable"])
     item <- str_split(variable, "_price_per_unit")[[1]][1]
     outlier.type <- as.character(outliers[r, "outlier.type"])
